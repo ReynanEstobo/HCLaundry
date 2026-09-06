@@ -20,6 +20,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { sendEmail } from "../services/api/notificationApi";
 
 function useScrollReveal(threshold = 0.15) {
   const ref = useRef(null);
@@ -516,14 +517,7 @@ export default function LandingPage() {
     setSending(true);
 
     try {
-      const API_URL = import.meta.env.DEV
-        ? "https://4jlaundry-project.pages.dev/api/send-email"
-        : "/api/send-email";
-
-      const res = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await sendEmail({
           to: "shopjlaundry7@gmail.com",
           subject: "New Contact Message - 4J Laundry",
           body: `
@@ -535,10 +529,7 @@ Address: ${formData.address}
 Message:
 ${formData.message}
           `,
-        }),
-      });
-
-      const data = await res.json();
+        });
 
       if (data.success) {
         setNotification({

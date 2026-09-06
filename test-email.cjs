@@ -1,8 +1,9 @@
 // Quick test script — run: node test-email.js your-email@gmail.com
+require("dotenv").config();
 const nodemailer = require("nodemailer");
 
-const GMAIL_EMAIL = "shoplaundry7@gmail.com";
-const GMAIL_APP_PASSWORD = "vvdk carh zioq gdkm";
+const GMAIL_EMAIL = process.env.GMAIL_EMAIL;
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 
 const testTo = process.argv[2];
 if (!testTo) {
@@ -11,6 +12,9 @@ if (!testTo) {
 }
 
 async function main() {
+  if (!GMAIL_EMAIL || !GMAIL_APP_PASSWORD) {
+    throw new Error("GMAIL_EMAIL and GMAIL_APP_PASSWORD must be configured in .env");
+  }
   console.log(`Sending test email to: ${testTo}`);
 
   const transporter = nodemailer.createTransport({

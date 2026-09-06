@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
+import { sendEmail, sendSms } from "../services/api/notificationApi";
 
 const STATUS_FLOW = [
   "pending",
@@ -78,16 +79,12 @@ function calculateDynamicETA(order, settings) {
 async function sendReadyEmail(order, customerName, customerEmail) {
   if (!customerEmail) return;
   try {
-    const res = await fetch("/api/send-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const res = await sendEmail({
         to: customerEmail,
         subject: `Your Laundry is Ready for Pickup! (Tracking #: ${order.order_number})`,
         body: `Hi ${customerName || "Customer"},\n\nGreat news! Your laundry is now ready for pickup at 4J Laundry.\n\nTracking Number: ${order.order_number}\n\nPlease pick it up at your earliest convenience during our business hours.\n\nThank you for choosing 4J Laundry!\n\n-- 4J Laundry Team`,
-      }),
     });
-    if (res.ok) {
+    if (res.success) {
       toast.success(`Email notification sent to ${customerEmail}`);
     }
   } catch {
@@ -119,11 +116,7 @@ async function sendOrderSMS(
 
     const message = `Hi ${customerName || "Customer"}! Your laundry order has been received.\n\nTracking #: ${orderNumber}\nService: ${serviceName}\nWeight: ${weightKg}kg\nTotal: P${totalPrice.toLocaleString()}\nETA: ~${etaText}\n\nTrack your order at our website using your tracking number.\n\nWe'll notify you when it's ready. Thank you! - 4J Laundry`;
 
-    await fetch("/api/send-sms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, message }),
-    });
+    await sendSms({ phone, message });
   } catch {
     // Silently fail - SMS is best-effort
   }
@@ -134,11 +127,7 @@ async function sendReadySMS(phone, orderNumber, customerName) {
   try {
     const message = `Hi ${customerName || "Customer"}! Your laundry (Tracking #: ${orderNumber}) is now READY for pickup. Please visit 4J Laundry at your earliest convenience. Thank you!`;
 
-    await fetch("/api/send-sms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, message }),
-    });
+    await sendSms({ phone, message });
   } catch {
     // Silently fail
   }
@@ -175,16 +164,12 @@ async function sendOrderReceivedEmail(
       timeOptions,
     );
 
-    const res = await fetch("/api/send-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const res = await sendEmail({
         to: customerEmail,
         subject: `Order Received! (Tracking #: ${orderNumber})`,
         body: `Hi ${customerName || "Customer"},\n\nThank you for choosing 4J Laundry! Your garment has been received and is now being processed.\n\nOrder Details:\n- Tracking Number: ${orderNumber}\n- Service: ${serviceName}\n- Weight: ${weightKg} kg\n- Total: P${totalPrice.toLocaleString()}\n\nEstimated Completion Time: ${etaText} (approximately ${completionText})\n\nYou can track your order anytime on our website using your tracking number.\n\nWe'll notify you via email once your laundry is ready for pickup.\n\nThank you!\n\n-- 4J Laundry Team`,
-      }),
     });
-    if (res.ok) {
+    if (res.success) {
       toast.success(`Order confirmation email sent to ${customerEmail}`);
     }
   } catch {

@@ -66,7 +66,7 @@ export default function Notifications() {
     setSending(true);
 
     try {
-      const res = await fetch("/api/send-email", {
+      const res = await fetch("/api/notifications/email", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -108,7 +108,7 @@ export default function Notifications() {
     }));
 
     try {
-      const res = await fetch("/api/send-email", {
+      const res = await fetch("/api/notifications/email", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

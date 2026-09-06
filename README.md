@@ -1,60 +1,53 @@
-# 4J LAUNDRY - Management System
+# 4J Laundry Management System
 
-A full-featured laundry shop management system built with React + Supabase.
+The React interface is separated from the Node.js API. Existing screens, routes,
+forms, styling, Supabase schema, and user flows are preserved.
 
-## Features
-
-- **Dashboard** — Overview of today's orders, revenue, active orders, stock alerts, and charts
-- **Orders** — Create, track, and manage laundry orders with real-time countdown timers
-- **Customers** — Customer database with search and CRUD operations
-- **Inventory** — Track stock levels (soap, detergent, powder, etc.) with low-stock alerts
-- **Stock Predictions** — AI-powered prediction of how many days until stock runs out based on historical usage
-- **SMS Notifications** — Send SMS to customers (pickup ready, reminders, promos) with templates
-- **Analytics** — Revenue trends, expenses, profit tracking, service breakdown, payment method stats
-
-## Tech Stack
-
-- **Frontend:** React 19 + Vite
-- **Database:** Supabase (PostgreSQL)
-- **Charts:** Recharts
-- **Icons:** Lucide React
-- **Notifications:** React Hot Toast
+```text
+frontend/                 React/Vite application
+  src/components/         Shared layout
+  src/pages/              Existing feature screens
+  src/context/            Authentication state
+  src/services/api/       Central browser-to-API client
+  src/lib/                Compatibility query/realtime adapter
+backend/                  Server-only API
+  config/                 Supabase configuration
+  models/                 Data access whitelist/query model
+  controllers/            HTTP-independent feature handlers
+  routes/                 Resource-to-route definitions
+  middleware/             Authentication utilities
+  services/               Email, SMS, Gemini, realtime event services
+```
 
 ## Setup
 
-### 1. Supabase Setup
+1. Copy `.env.example` to `.env` and set the values. All values now remain
+   server-side; do not add `VITE_SUPABASE_*` or `VITE_GEMINI_API_KEY` values.
+2. Use the existing `supabase_schema.sql` against the same Supabase project.
+   The deployed database must also retain its existing application-added fields
+   such as `settings`, `branch`, `amount_paid`, and `priority_order`.
+3. Start the API: `npm run dev:backend`.
+4. In another terminal, start React: `npm run dev:frontend`.
+5. Open `http://localhost:5173`.
 
-1. Create a project at [supabase.com](https://supabase.com)
-2. Go to **SQL Editor** and run the contents of `supabase_schema.sql`
-3. Go to **Authentication > Settings** and enable Email auth
-4. Create your admin user in **Authentication > Users**
+## API
 
-### 2. Environment Variables
+Resource requests are authenticated and use these endpoints:
 
-Copy `.env.example` to `.env` and fill in your Supabase credentials:
+- `/api/customers`
+- `/api/orders`
+- `/api/inventory/items`, `/api/inventory/categories`, `/api/inventory/usage`, `/api/inventory/restocks`
+- `/api/staff`, `/api/settings`, `/api/service-types`, `/api/expenses`, `/api/sms-log`
+- `/api/auth/login`, `/api/auth/me`, `/api/auth/signup`, `/api/auth/password`
+- `/api/notifications/email`, `/api/notifications/sms`, `/api/ai/generate`
+- `/api/public/orders/track?q=...` and `/api/public/settings`
 
-```
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-```
+The frontend query adapter centrally translates the existing Supabase-shaped
+feature calls to these API routes. This minimizes behavioral risk while keeping
+database access and provider credentials out of the browser.
 
-You can find these in Supabase: **Settings > API**
+## Security note
 
-### 3. Install & Run
-
-```bash
-npm install
-npm run dev
-```
-
-Open [http://localhost:5173](http://localhost:5173) and sign in with the user you created.
-
-## SMS Integration
-
-SMS is ready for integration. Messages are currently logged and queued in the database. Once your sender name is verified with your SMS provider, connect the API in the SMS module.
-
-## Currency
-
-The system uses Philippine Peso (₱). Prices are configurable per service type.
-"# 4f-reynan" 
-"# 4f-reynan" 
+An old hard-coded service-role key was removed from `seed-user.js`. Rotate that
+key in Supabase before deploying this version, then set the replacement only in
+the server environment.

@@ -1,18 +1,25 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
-import LandingPage from './pages/LandingPage'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Orders from './pages/Orders'
-import Customers from './pages/Customers'
-import Inventory from './pages/Inventory'
-import Analytics from './pages/Analytics'
-import SMS from './pages/SMS'
-import Settings from './pages/Settings'
-import Staff from './pages/Staff'
-import StaffDashboard from './pages/StaffDashboard'
+
+// Page modules (and their data effects) are loaded only after their route opens.
+const LandingPage = lazy(() => import('./pages/LandingPage'))
+const Login = lazy(() => import('./pages/Login'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Orders = lazy(() => import('./pages/Orders'))
+const Customers = lazy(() => import('./pages/Customers'))
+const Inventory = lazy(() => import('./pages/Inventory'))
+const Analytics = lazy(() => import('./pages/Analytics'))
+const SMS = lazy(() => import('./pages/SMS'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Staff = lazy(() => import('./pages/Staff'))
+const StaffDashboard = lazy(() => import('./pages/StaffDashboard'))
+
+function PageLoader() {
+  return <div className="loading-spinner"><div className="spinner" /></div>
+}
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -45,7 +52,8 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
       <Route path="/" element={user ? <Navigate to="/dashboard" /> : <LandingPage />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
       <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
@@ -58,7 +66,8 @@ function AppRoutes() {
         <Route path="staff" element={<AdminRoute><Staff /></AdminRoute>} />
         <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
       </Route>
-    </Routes>
+      </Routes>
+    </Suspense>
   )
 }
 

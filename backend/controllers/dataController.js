@@ -1,0 +1,23 @@
+import { execute } from '../models/databaseModel.js'
+import { events } from '../services/realtimeService.js'
+
+function validate(table, { operation, payload = {} }) {
+  if (!['insert', 'update'].includes(operation)) return
+  if (table === 'customers' && ((!payload.name && operation === 'insert') || (!payload.phone && operation === 'insert'))) {
+    throw Object.assign(new Error('Name and phone are required'), { status: 400 })
+  }
+  if (table === 'orders' && operation === 'insert' && (!Number(payload.weight_kg) || Number(payload.weight_kg) <= 0)) {
+    throw Object.assign(new Error('A valid order weight is required'), { status: 400 })
+  }
+  if (table === 'inventory_items' && operation === 'insert' && !payload.name) {
+    throw Object.assign(new Error('Inventory item name is required'), { status: 400 })
+  }
+}
+
+export async function handleData(table, body) {
+  validate(table, body)
+  const result = await execute(table, body)
+  if (result.error) throw Object.assign(new Error(result.error.message), { status: 400, details: result.error })
+  if (body.operation !== 'select') events.emit('change', { table, new: body.payload || null })
+  return result
+}

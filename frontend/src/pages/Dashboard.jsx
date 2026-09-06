@@ -15,7 +15,7 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Area,
@@ -59,8 +59,15 @@ export default function Dashboard() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 10;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const isFirstDashboardEffect = useRef(true);
 
   useEffect(() => {
+    // The one-time effect below performs the initial load with AI insights.
+    // Skip this effect's first run so the same dashboard queries are not doubled.
+    if (isFirstDashboardEffect.current) {
+      isFirstDashboardEffect.current = false;
+      return;
+    }
     loadDashboard(false);
   }, [range, page]);
 
