@@ -195,7 +195,8 @@ export default function Dashboard() {
     const orders = ordersRes.data || [];
     const inventory = inventoryRes.data || [];
     const usageLogs = usageRes.data || [];
-    const todayOrders = orders.filter((o) => o.created_at >= today);
+    const reportableOrders = orders.filter((o) => o.status !== "cancelled");
+    const todayOrders = reportableOrders.filter((o) => o.created_at >= today);
     const todayRevenue = todayOrders
       .filter((o) => o.payment_status === "paid")
       .reduce((sum, o) => sum + Number(o.total_price), 0);
@@ -308,12 +309,14 @@ Do NOT add extra text.
 
   function generateForecasts(orders, inventory, usageLogs) {
     const now = new Date();
+    // Forecasts must not treat cancelled transactions as business activity.
+    const reportableOrders = orders.filter((order) => order.status !== "cancelled");
 
     // --- Workload prediction (next 7 days) ---
     // Calculate avg daily orders from last 30 days
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const last30 = orders.filter(
+    const last30 = reportableOrders.filter(
       (o) => new Date(o.created_at) >= thirtyDaysAgo,
     );
     const avgDailyOrders = last30.length / 30;
@@ -322,12 +325,12 @@ Do NOT add extra text.
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowDow = tomorrow.getDay();
-    const sameDayOrders = orders.filter(
+    const sameDayOrders = reportableOrders.filter(
       (o) => new Date(o.created_at).getDay() === tomorrowDow,
     );
     const avgDowOrders =
       sameDayOrders.length > 0
-        ? sameDayOrders.length / Math.max(Math.ceil(orders.length / 7), 1)
+        ? sameDayOrders.length / Math.max(Math.ceil(reportableOrders.length / 7), 1)
         : avgDailyOrders;
 
     // Workload level
@@ -342,14 +345,14 @@ Do NOT add extra text.
     else if (workloadPct >= 20) workloadLevel = "Normal";
 
     // --- Revenue prediction (next month) ---
-    const paidOrders = orders.filter((o) => o.payment_status === "paid");
+    const paidOrders = reportableOrders.filter((o) => o.payment_status === "paid");
     const totalRevenue = paidOrders.reduce(
       (s, o) => s + Number(o.total_price),
       0,
     );
     const oldestOrder =
-      orders.length > 0
-        ? new Date(Math.min(...orders.map((o) => new Date(o.created_at))))
+      reportableOrders.length > 0
+        ? new Date(Math.min(...reportableOrders.map((o) => new Date(o.created_at))))
         : now;
     const daysOfData = Math.max(differenceInDays(now, oldestOrder), 1);
     const dailyRevenue = totalRevenue / daysOfData;

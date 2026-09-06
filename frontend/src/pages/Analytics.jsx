@@ -249,7 +249,7 @@ export default function Analytics() {
     const requestError = ordersRes.error || expensesRes.error || staffRes.error || inventoryRes.error;
     if (requestError) throw requestError;
 
-    const orderData = ordersRes.data || [];
+    const orderData = (ordersRes.data || []).filter((order) => order.status !== "cancelled");
     const expenseData = expensesRes.data || [];
     const staffById = new Map((staffRes.data || []).map((staff) => [staff.id, staff.full_name || "Unassigned staff"]));
     const inventoryData = inventoryRes.data || [];

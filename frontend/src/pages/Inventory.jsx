@@ -17,6 +17,7 @@ import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { restockBranchInventory } from "../services/api/operationsApi";
 import { PageError, PageLoader } from "../components/AsyncState";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 const BRANCHES = [
   "Main - Brgy 7",
@@ -32,6 +33,8 @@ export default function Inventory() {
   const [loadError, setLoadError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [showRestock, setShowRestock] = useState(null);
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState(
@@ -224,15 +227,23 @@ export default function Inventory() {
     loadData();
   }
 
-  async function deleteItem(id) {
-    if (!confirm("Delete this item?")) return;
-    const { error } = await supabase
-      .from("inventory_items")
-      .delete()
-      .eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Item deleted");
-    loadData();
+  async function deleteItem() {
+    if (!itemToDelete || deleting) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("inventory_items")
+        .delete()
+        .eq("id", itemToDelete.id);
+      if (error) throw error;
+      toast.success("Item moved to Recycle Bin");
+      setItemToDelete(null);
+      loadData();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const filtered = items.filter((i) => {
@@ -491,7 +502,7 @@ export default function Inventory() {
                           </button>
                           <button
                             className="btn-icon"
-                            onClick={() => deleteItem(item.id)}
+                            onClick={() => setItemToDelete(item)}
                             style={{ color: "var(--danger)" }}
                           >
                             <Trash2 size={16} />
@@ -745,6 +756,16 @@ export default function Inventory() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(itemToDelete)}
+        title="Move inventory item to Recycle Bin?"
+        message={<> <strong>{itemToDelete?.name}</strong> will no longer be available for branch stock checks or new orders. An administrator can restore it later.</>}
+        confirmLabel="Move to Recycle Bin"
+        cancelLabel="Keep Item"
+        loading={deleting}
+        onConfirm={deleteItem}
+        onClose={() => setItemToDelete(null)}
+      />
     </>
   );
 }

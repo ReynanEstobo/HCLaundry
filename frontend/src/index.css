@@ -3737,6 +3737,93 @@ textarea.form-control {
   border-radius: 0 0 16px 16px;
 }
 
+/* Destructive-action confirmation: used for recoverable order cancellation. */
+.cancellation-alert {
+  max-width: 540px;
+  border: 1px solid rgba(220, 38, 38, 0.22);
+}
+.cancellation-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cancellation-alert-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 50%;
+  color: #dc2626;
+  background: #fef2f2;
+}
+.cancellation-alert-message {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 18px;
+  padding: 13px 14px;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  color: #9a3412;
+  background: #fff7ed;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.cancellation-confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.spin { animation: spin 0.8s linear infinite; }
+
+/* Shared confirmation dialog for Recycle Bin actions. */
+.confirm-dialog {
+  width: min(460px, calc(100vw - 32px));
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--bg-card, #fff);
+  box-shadow: var(--shadow-xl);
+  animation: slideUp 0.2s ease-out;
+}
+.confirm-dialog-danger { border: 1px solid rgba(220, 38, 38, 0.25); }
+.confirm-dialog-restore { border: 1px solid rgba(14, 165, 233, 0.25); }
+.confirm-dialog-header {
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.confirm-dialog-header h3 { margin: 0; font-size: 18px; color: var(--text-primary); }
+.confirm-dialog-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+}
+.confirm-dialog-danger .confirm-dialog-icon { color: #dc2626; background: #fef2f2; }
+.confirm-dialog-restore .confirm-dialog-icon { color: #0284c7; background: #e0f2fe; }
+.confirm-dialog-body {
+  padding: 20px 22px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.confirm-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 15px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary, #fafafa);
+}
+.confirm-dialog-action { display: inline-flex; align-items: center; gap: 7px; }
+
 .order-section {
   margin-bottom: 20px;
   padding-bottom: 20px;
@@ -3791,6 +3878,17 @@ textarea.form-control {
   background: rgba(255, 255, 255, 0.02);
   border-top-color: var(--border);
 }
+[data-theme="dark"] .cancellation-alert-icon {
+  color: #f87171;
+  background: rgba(220, 38, 38, 0.16);
+}
+[data-theme="dark"] .cancellation-alert-message {
+  color: #fdba74;
+  border-color: rgba(251, 146, 60, 0.35);
+  background: rgba(154, 52, 18, 0.2);
+}
+[data-theme="dark"] .confirm-dialog-danger .confirm-dialog-icon { color: #f87171; background: rgba(220, 38, 38, 0.16); }
+[data-theme="dark"] .confirm-dialog-restore .confirm-dialog-icon { color: #38bdf8; background: rgba(14, 165, 233, 0.16); }
 [data-theme="dark"] .order-section {
   border-bottom-color: var(--border-light);
 }

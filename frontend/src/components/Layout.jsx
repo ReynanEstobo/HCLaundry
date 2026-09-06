@@ -8,6 +8,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   Settings,
+  ArchiveRestore,
   ShoppingBag,
   UserCog,
   Users,
@@ -34,6 +35,7 @@ const navigation = [
     adminOnly: true,
   },
   { name: "Staff", path: "/dashboard/staff", icon: UserCog, adminOnly: true },
+  { name: "Recycle Bin", path: "/dashboard/recycle-bin", icon: ArchiveRestore, adminOnly: true },
   {
     name: "Settings",
     path: "/dashboard/settings",
@@ -51,6 +53,7 @@ const pageNames = {
   "/dashboard/sms": "Notifications",
   "/dashboard/staff": "Staff",
   "/dashboard/settings": "Settings",
+  "/dashboard/recycle-bin": "Recycle Bin",
 };
 
 export default function Layout() {

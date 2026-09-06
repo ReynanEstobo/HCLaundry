@@ -6,12 +6,13 @@ import {
   Edit2,
   LayoutGrid,
   List,
+  Loader2,
   Mail,
   Minus,
   Play,
   Plus,
   Search,
-  Trash2,
+  TriangleAlert,
   User,
   X,
 } from "lucide-react";
@@ -20,7 +21,7 @@ import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { sendEmail, sendSms } from "../services/api/notificationApi";
-import { createBranchOrder, getVisibleCustomers, lookupCustomerByPhone } from "../services/api/operationsApi";
+import { cancelBranchOrder, createBranchOrder, getVisibleCustomers, lookupCustomerByPhone } from "../services/api/operationsApi";
 import { useAuth } from "../context/AuthContext";
 import { PageError, PageLoader } from "../components/AsyncState";
 
@@ -32,6 +33,7 @@ const STATUS_FLOW = [
   "ready",
   "released",
 ];
+const STATUS_FILTERS = ["all", ...STATUS_FLOW, "cancelled"];
 const STATUS_LABELS = {
   pending: "Pending",
   washing: "Washing",
@@ -39,6 +41,7 @@ const STATUS_LABELS = {
   folding: "Folding",
   ready: "Ready for pick-up",
   released: "Released",
+  cancelled: "Cancelled",
 };
 const STATUS_ICONS = {
   pending: "\u23F3",
@@ -47,6 +50,7 @@ const STATUS_ICONS = {
   folding: "\uD83D\uDC55",
   ready: "\u2705",
   released: "\uD83D\uDCE6",
+  cancelled: "\u274C",
 };
 
 // Stages with timers
@@ -189,6 +193,9 @@ export default function Orders() {
   const { role } = useAuth();
   const isAdmin = role === "admin";
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [cancellingOrder, setCancellingOrder] = useState(null);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
@@ -917,12 +924,26 @@ export default function Orders() {
     updateStatus(order, STATUS_FLOW[idx + 1]);
   }
 
-  async function deleteOrder(id) {
-    if (!confirm("Delete this order?")) return;
-    const { error } = await supabase.from("orders").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Order deleted");
-    loadData();
+  function openCancellation(order) {
+    setCancellingOrder(order);
+    setCancellationReason("");
+  }
+
+  async function confirmCancellation() {
+    if (!cancellationReason.trim()) return toast.error("Please enter a cancellation reason");
+    if (!cancellingOrder || isCancelling) return;
+    setIsCancelling(true);
+    try {
+      await cancelBranchOrder(cancellingOrder.id, cancellationReason.trim());
+      toast.success("Order cancelled and branch inventory restored");
+      setCancellingOrder(null);
+      setCancellationReason("");
+      loadData();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setIsCancelling(false);
+    }
   }
 
   function getTimeRemaining(order, settings) {
@@ -1019,7 +1040,7 @@ export default function Orders() {
       {/* Toolbar */}
       <div className="garment-toolbar">
         <div className="garment-filters">
-          {["all", ...STATUS_FLOW].map((s) => (
+          {STATUS_FILTERS.map((s) => (
             <button
               key={s}
               className={`garment-filter-btn ${filter === s ? "active" : ""}`}
@@ -1342,14 +1363,16 @@ export default function Orders() {
                           >
                             <Edit2 size={16} />
                           </button>
-                          <button
-                            className="btn-icon"
-                            title="Delete"
-                            onClick={() => deleteOrder(order.id)}
-                            style={{ color: "var(--danger)" }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {!['released', 'cancelled'].includes(order.status) && (
+                            <button
+                              className="btn-icon"
+                              title="Cancel order"
+                              onClick={() => openCancellation(order)}
+                              style={{ color: "var(--danger)" }}
+                            >
+                              <X size={16} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1981,6 +2004,45 @@ export default function Orders() {
                 onClick={completePaymentAndRelease}
               >
                 Confirm & Release
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {cancellingOrder && (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onMouseDown={() => !isCancelling && setCancellingOrder(null)}
+        >
+          <div
+            className="order-modal cancellation-alert"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="cancel-order-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="order-modal-header">
+              <div className="cancellation-alert-title">
+                <span className="cancellation-alert-icon"><TriangleAlert size={22} /></span>
+                <div><h3 id="cancel-order-title">Cancel this order?</h3><p>Order #{cancellingOrder.order_number}</p></div>
+              </div>
+              <button className="btn-icon" aria-label="Close cancellation dialog" disabled={isCancelling} onClick={() => setCancellingOrder(null)}><X size={20} /></button>
+            </div>
+            <div className="order-modal-body">
+              <div className="cancellation-alert-message">
+                <strong>This action changes the order status to Cancelled.</strong>
+                <span>Used inventory is returned to <b>{cancellingOrder.branch || "this branch"}</b>. Payments are retained for audit purposes; issue a refund or correction separately when needed.</span>
+              </div>
+              <div className="form-group">
+                <label>Cancellation reason *</label>
+                <textarea autoFocus className="form-control" rows={4} disabled={isCancelling} value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value)} placeholder="Explain why this order is being cancelled" />
+              </div>
+            </div>
+            <div className="order-modal-footer">
+              <button className="btn btn-secondary" disabled={isCancelling} onClick={() => setCancellingOrder(null)}>Keep Order</button>
+              <button className="btn btn-danger cancellation-confirm-btn" disabled={isCancelling || !cancellationReason.trim()} onClick={confirmCancellation}>
+                {isCancelling ? <><Loader2 size={16} className="spin" /> Cancelling…</> : "Cancel Order & Restore Stock"}
               </button>
             </div>
           </div>

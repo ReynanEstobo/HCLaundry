@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { PageError, PageLoader } from "../components/AsyncState";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 // ─────────────────────────────────────
 // ROLES
@@ -62,6 +63,8 @@ export default function Staff() {
   const [showPassword, setShowPassword] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [staffToDelete, setStaffToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [form, setForm] = useState({
     full_name: "",
@@ -277,18 +280,20 @@ export default function Staff() {
   // ─────────────────────────────────────
   // DELETE STAFF
   // ─────────────────────────────────────
-  async function deleteStaff(staff) {
-    if (!confirm(`Delete ${staff.full_name}? This cannot be undone.`)) return;
-
-    const { error } = await supabase.from("staff").delete().eq("id", staff.id);
-
-    if (error) {
-      return toast.error(error.message);
+  async function deleteStaff() {
+    if (!staffToDelete || deleting) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from("staff").delete().eq("id", staffToDelete.id);
+      if (error) throw error;
+      toast.success("Staff moved to Recycle Bin");
+      setStaffToDelete(null);
+      loadStaff();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setDeleting(false);
     }
-
-    toast.success("Staff removed");
-
-    loadStaff();
   }
 
   // ─────────────────────────────────────
@@ -481,7 +486,7 @@ export default function Staff() {
                         {/* DELETE */}
                         <button
                           className="btn-icon"
-                          onClick={() => deleteStaff(s)}
+                          onClick={() => setStaffToDelete(s)}
                           title="Delete"
                           style={{
                             color: "var(--danger)",
@@ -754,6 +759,16 @@ export default function Staff() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(staffToDelete)}
+        title="Move staff account to Recycle Bin?"
+        message={<> <strong>{staffToDelete?.full_name}</strong>'s account will be archived and removed from active staff lists. An administrator can restore the account later.</>}
+        confirmLabel="Move to Recycle Bin"
+        cancelLabel="Keep Account"
+        loading={deleting}
+        onConfirm={deleteStaff}
+        onClose={() => setStaffToDelete(null)}
+      />
     </>
   );
 }

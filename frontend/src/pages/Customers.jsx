@@ -7,6 +7,7 @@ import { useRealtime } from "../lib/useRealtime";
 import { useAuth } from "../context/AuthContext";
 import { getVisibleCustomers, registerBranchCustomer } from "../services/api/operationsApi";
 import { PageError, PageLoader } from "../components/AsyncState";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 const BRANCHES = [
   "Main - Brgy 7",
@@ -22,6 +23,8 @@ export default function Customers() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({
@@ -122,12 +125,20 @@ export default function Customers() {
     loadCustomers();
   }
 
-  async function deleteCustomer(id) {
-    if (!confirm("Delete this customer?")) return;
-    const { error } = await supabase.from("customers").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Customer deleted");
-    loadCustomers();
+  async function deleteCustomer() {
+    if (!customerToDelete || deleting) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from("customers").delete().eq("id", customerToDelete.id);
+      if (error) throw error;
+      toast.success("Customer moved to Recycle Bin");
+      setCustomerToDelete(null);
+      loadCustomers();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   // 🔥 SAME LOGIC AS ORDERS
@@ -227,7 +238,7 @@ export default function Customers() {
                         </button>
                         <button
                           className="btn-icon"
-                          onClick={() => deleteCustomer(c.id)}
+                          onClick={() => setCustomerToDelete(c)}
                           style={{ color: "var(--danger)" }}
                         >
                           <Trash2 size={16} />
@@ -416,6 +427,16 @@ export default function Customers() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(customerToDelete)}
+        title="Move customer to Recycle Bin?"
+        message={<> <strong>{customerToDelete?.name}</strong> will be hidden from active client lists. An administrator can restore the client later from the Recycle Bin.</>}
+        confirmLabel="Move to Recycle Bin"
+        cancelLabel="Keep Customer"
+        loading={deleting}
+        onConfirm={deleteCustomer}
+        onClose={() => setCustomerToDelete(null)}
+      />
     </>
   );
 }

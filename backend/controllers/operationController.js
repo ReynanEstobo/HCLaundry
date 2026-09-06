@@ -62,3 +62,18 @@ export async function restockInventory(body, identity) {
   if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
   return { data }
 }
+
+export async function cancelOrder(body, identity) {
+  const orderId = body?.orderId
+  const reason = String(body?.reason || '').trim()
+  if (!orderId || !reason) throw Object.assign(new Error('A cancellation reason is required.'), { status: 400 })
+  requireBranch(identity)
+  const { data: order, error: orderError } = await database.from('orders').select('id, branch, branch_id, status').eq('id', orderId).maybeSingle()
+  if (orderError || !order) throw Object.assign(new Error('Order not found.'), { status: 404 })
+  if (identity.role !== 'admin' && order.branch_id !== identity.branchId) throw Object.assign(new Error('You can only cancel orders assigned to your branch.'), { status: 403 })
+  const { data, error } = await database.rpc('cancel_branch_order', {
+    p_order_id: order.id, p_staff_id: identity.staffId, p_reason: reason,
+  })
+  if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
+  return { data }
+}

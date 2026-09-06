@@ -8,6 +8,16 @@ export const TABLES = new Set([
   'settings', 'service_types', 'sms_log', 'branches', 'payments', 'ai_forecasts',
 ])
 
+// These reference/operational records can be hidden and later restored.
+// Transaction and inventory-ledger records are deliberately excluded.
+const SOFT_DELETABLE_TABLES = new Set([
+  'customers', 'staff', 'inventory_items', 'inventory_categories',
+  'service_types', 'expenses',
+])
+const PROTECTED_TRANSACTION_TABLES = new Set([
+  'orders', 'payments', 'inventory_usage_log', 'inventory_restocks', 'sms_log',
+])
+
 function applyFilters(query, filters = []) {
   return filters.reduce((current, { type, column, value }) => {
     if (!column) return current
@@ -94,6 +104,15 @@ async function assertInventoryRecordOwnership(table, request, identity) {
 
 export async function execute(table, request, identity) {
   if (!TABLES.has(table)) throw Object.assign(new Error('Unknown resource'), { status: 404 })
+  if (SOFT_DELETABLE_TABLES.has(table) && ['insert', 'update'].includes(request.operation)) {
+    const entries = Array.isArray(request.payload) ? request.payload : [request.payload || {}]
+    if (entries.some(entry => Object.hasOwn(entry, 'deleted_at') || Object.hasOwn(entry, 'deleted_by_staff_id'))) {
+      throw Object.assign(new Error('Deletion fields can only be changed through the secure Recycle Bin workflow.'), { status: 403 })
+    }
+  }
+  if (table === 'orders' && request.operation === 'update' && request.payload?.status === 'cancelled') {
+    throw Object.assign(new Error('Orders must be cancelled through the secure cancellation workflow.'), { status: 403 })
+  }
   if (BRANCH_SCOPED_TABLES.has(table)) {
     request = identity.role === 'admin'
       ? await attachAdminBranch(table, request, identity)
@@ -101,9 +120,36 @@ export async function execute(table, request, identity) {
     request = await assertInventoryRecordOwnership(table, request, identity)
   }
   const { operation, selection = '*', filters, orders = [], range, limit, payload, count, single, returning } = request
+  if (operation === 'delete' && PROTECTED_TRANSACTION_TABLES.has(table)) {
+    throw Object.assign(new Error('This transaction record cannot be deleted. Use the appropriate cancellation or correction workflow so the audit trail and inventory history remain accurate.'), { status: 400 })
+  }
+  if (operation === 'delete' && SOFT_DELETABLE_TABLES.has(table)) {
+    const existing = await applyFilters(database.from(table).select('*'), filters)
+    if (existing.error) return { data: null, error: existing.error, count: null }
+    if (!existing.data?.length) return { data: [], error: null, count: 0 }
+
+    let archiveQuery = database.from(table).update({
+      deleted_at: new Date().toISOString(),
+      deleted_by_staff_id: identity.staffId || null,
+    }).select('*')
+    archiveQuery = applyFilters(archiveQuery, filters)
+    const archived = await archiveQuery
+    if (archived.error) return { data: null, error: archived.error, count: null }
+
+    const audit = await database.from('audit_logs').insert(existing.data.map((before, index) => ({
+      action: 'delete', table_name: table, record_id: before.id,
+      actor_staff_id: identity.staffId || null, branch_id: before.branch_id || null,
+      before_data: before, after_data: archived.data?.[index] || null,
+    })))
+    if (audit.error) return { data: null, error: audit.error, count: null }
+    return { data: archived.data || [], error: null, count: archived.data?.length || 0 }
+  }
   let query = database.from(table)
 
-  if (operation === 'select') query = query.select(selection, count ? { count } : undefined)
+  if (operation === 'select') {
+    query = query.select(selection, count ? { count } : undefined)
+    if (SOFT_DELETABLE_TABLES.has(table)) query = query.is('deleted_at', null)
+  }
   if (operation === 'insert') query = query.insert(payload)
   if (operation === 'update') query = query.update(payload)
   if (operation === 'delete') query = query.delete()
@@ -121,11 +167,11 @@ export async function execute(table, request, identity) {
 
 export async function getStaffProfile(authId, email) {
   const selection = 'id, role, full_name, branch, branch_id'
-  const profile = await database.from('staff').select(selection).eq('auth_id', authId).maybeSingle()
+  const profile = await database.from('staff').select(selection).eq('auth_id', authId).is('deleted_at', null).maybeSingle()
   if (profile.data || profile.error || !email) return profile
 
   // Repair legacy staff rows created before auth_id was stored.
-  const legacy = await database.from('staff').select(selection).eq('email', email).is('auth_id', null).maybeSingle()
+  const legacy = await database.from('staff').select(selection).eq('email', email).is('auth_id', null).is('deleted_at', null).maybeSingle()
   if (!legacy.data || legacy.error) return profile
   return database.from('staff').update({ auth_id: authId }).eq('id', legacy.data.id).is('auth_id', null).select(selection).maybeSingle()
 }
