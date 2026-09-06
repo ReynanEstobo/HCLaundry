@@ -20,13 +20,9 @@ import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { sendEmail, sendSms } from "../services/api/notificationApi";
-<<<<<<< HEAD
 import { createBranchOrder, getVisibleCustomers, lookupCustomerByPhone } from "../services/api/operationsApi";
 import { useAuth } from "../context/AuthContext";
 import { PageError, PageLoader } from "../components/AsyncState";
-=======
-import { useAuth } from "../context/AuthContext";
->>>>>>> 728e40e (Fixed)
 
 const STATUS_FLOW = [
   "pending",
@@ -587,11 +583,8 @@ export default function Orders() {
       return toast.error("Phone number is required");
     if (!form.customer_name.trim())
       return toast.error("Client name is required");
-<<<<<<< HEAD
     if (!editing && serviceTypes.length > 0 && !form.service_type_id)
       return toast.error("Please select a service type");
-=======
->>>>>>> 728e40e (Fixed)
     if (isAdmin && !form.branch)
       return toast.error("Please assign this order to a branch");
 
@@ -635,37 +628,6 @@ export default function Orders() {
           ? "paid"
           : "partial";
 
-<<<<<<< HEAD
-=======
-    // Auto-register customer if not found
-    let customerId = form.customer_id;
-    if (!customerId) {
-      const { data: existingCust } = await supabase
-        .from("customers")
-        .select("id")
-        .eq("phone", form.customer_phone.trim())
-        .maybeSingle();
-      if (existingCust) {
-        customerId = existingCust.id;
-      } else {
-        const { data: newCust, error: custErr } = await supabase
-          .from("customers")
-          .insert({
-            name: form.customer_name.trim(),
-            phone: form.customer_phone.trim(),
-            email: form.customer_email.trim() || null,
-            ...(isAdmin && { branch: form.branch }),
-          })
-          .select("id")
-          .single();
-        if (custErr)
-          return toast.error("Failed to register client: " + custErr.message);
-        customerId = newCust.id;
-        toast.success("New client registered!");
-      }
-    }
-
->>>>>>> 728e40e (Fixed)
     const totalEtaMinutes =
       (Number(settings.etawash) || 45) +
       (Number(settings.etadrying) || 40) +
@@ -1653,11 +1615,7 @@ export default function Orders() {
                           className="form-control"
                           value={form.branch}
                           onChange={(e) =>
-<<<<<<< HEAD
                             setForm((f) => ({ ...f, branch: e.target.value, addons: {} }))
-=======
-                            setForm((f) => ({ ...f, branch: e.target.value }))
->>>>>>> 728e40e (Fixed)
                           }
                           required
                         >

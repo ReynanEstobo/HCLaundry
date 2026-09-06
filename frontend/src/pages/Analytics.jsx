@@ -28,10 +28,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { generateAiForecast, generateDecisionSupport } from "../services/geminiService";
-<<<<<<< HEAD
 import { PageError, PageLoader } from "../components/AsyncState";
-=======
->>>>>>> 728e40e (Fixed)
 
 // ─── Custom tooltip ────────────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
@@ -440,21 +437,13 @@ export default function Analytics() {
       const date = format(new Date(order.created_at), "yyyy-MM-dd");
       const day = totals.get(date) || { date, revenue: 0, orders: 0, paidOrders: 0 };
       day.orders += 1;
-<<<<<<< HEAD
       if (Number(order.amount_paid ?? (order.payment_status === "paid" ? order.total_price : 0)) > 0) {
         day.revenue += Number(order.amount_paid ?? (order.payment_status === "paid" ? order.total_price : 0)) || 0;
-=======
-      if (order.payment_status === "paid") {
-        day.revenue += Number(order.total_price) || 0;
->>>>>>> 728e40e (Fixed)
         day.paidOrders += 1;
       }
       totals.set(date, day);
     });
-<<<<<<< HEAD
 
-=======
->>>>>>> 728e40e (Fixed)
     return [...totals.values()].sort((a, b) => a.date.localeCompare(b.date));
   }
 
@@ -570,13 +559,9 @@ export default function Analytics() {
       // horizon are unchanged. This avoids charging a Gemini request each time
       // the Analytics page is opened.
       const forecastVersion = `${dailyHistory.map((day) => `${day.date}:${day.revenue}:${day.orders}`).join("|")}_${futureForecast.map((item) => item.forecastDate).join("|")}`;
-<<<<<<< HEAD
       // v2 intentionally ignores prior cached labels from before the
       // resilient forecast response format was introduced.
       const forecastCacheKey = `ai_forecast_v2_${selectedBranch}_${range}_${forecastVersion}`;
-=======
-      const forecastCacheKey = `ai_forecast_v1_${selectedBranch}_${range}_${forecastVersion}`;
->>>>>>> 728e40e (Fixed)
       const cachedForecast = localStorage.getItem(forecastCacheKey);
       const cachedForecastTime = localStorage.getItem(`${forecastCacheKey}_time`);
       const SIX_HOURS = 6 * 60 * 60 * 1000;
@@ -629,13 +614,8 @@ export default function Analytics() {
         localStorage.setItem(`${forecastCacheKey}_time`, Date.now().toString());
         if (aiForecast.insights?.length) setAiInsights(aiForecast.insights);
       } catch (aiError) {
-<<<<<<< HEAD
         console.warn("Forecast service failed; keeping the local trend baseline.", aiError.message);
         setForecastModel("Local trend baseline · low confidence");
-=======
-        console.warn("AI forecast unavailable; using trend baseline.", aiError.message);
-        setForecastModel("Trend baseline (AI unavailable)");
->>>>>>> 728e40e (Fixed)
       }
     } catch (err) {
       console.error(err);
@@ -686,7 +666,6 @@ export default function Analytics() {
           profit,
           totalOrders: orderData.length,
           averageOrderValue: stats.avgOrderValue || 0,
-<<<<<<< HEAD
           operationalSignals: [
             ...operationalSummary.topServices.map((service) => `Service ${service.name}: ${service.orders} orders, ₱${service.revenue.toLocaleString()} received.`),
             ...operationalSummary.topBranches.map((branchMetric) => `Branch ${branchMetric.name}: ${branchMetric.orders} orders, ₱${branchMetric.revenue.toLocaleString()} received.`),
@@ -696,8 +675,6 @@ export default function Analytics() {
             `Released orders: ${operationalSummary.completedOrders}.`,
             operationalSummary.averageTurnaroundHours == null ? "Turnaround time is not yet available." : `Average released-order turnaround: ${operationalSummary.averageTurnaroundHours.toFixed(1)} hours.`,
           ],
-=======
->>>>>>> 728e40e (Fixed)
         },
         trendData: chartData,
         forecastData,

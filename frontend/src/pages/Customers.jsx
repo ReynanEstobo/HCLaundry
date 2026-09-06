@@ -5,11 +5,8 @@ import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { useAuth } from "../context/AuthContext";
-<<<<<<< HEAD
 import { getVisibleCustomers, registerBranchCustomer } from "../services/api/operationsApi";
 import { PageError, PageLoader } from "../components/AsyncState";
-=======
->>>>>>> 728e40e (Fixed)
 
 const BRANCHES = [
   "Main - Brgy 7",

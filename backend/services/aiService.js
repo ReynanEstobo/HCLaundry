@@ -1,15 +1,9 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-<<<<<<< HEAD
 // Prefer the stable Flash models. Availability can still vary by Gemini
 // project, region, quota, or provider status, so the service has a local
 // deterministic fallback instead of failing the Analytics page.
 const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.6-flash']
-=======
-// Keep the currently supported model first; older names are retained only as
-// fallbacks for projects whose Gemini availability differs by region/account.
-const models = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite']
->>>>>>> 728e40e (Fixed)
 const cooldowns = new Map()
 const responseCache = new Map()
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000
@@ -50,7 +44,6 @@ function parseJson(text) {
   try { return JSON.parse(match[0]) } catch { throw Object.assign(new Error('The AI response was not valid JSON'), { status: 502 }) }
 }
 
-<<<<<<< HEAD
 function localForecast(history, forecastDates) {
   const totals = history.reduce((result, day) => {
     result.revenue += Math.max(0, Number(day?.revenue) || 0)
@@ -128,14 +121,6 @@ export async function generateForecast({ history, forecastDates, branch, range }
   let response
   try {
     response = await askGemini(`You are assisting a laundry business manager with a revenue-and-demand forecast.
-=======
-export async function generateForecast({ history, forecastDates, branch, range }) {
-  if (!Array.isArray(history) || !history.length || !Array.isArray(forecastDates) || !forecastDates.length) {
-    throw Object.assign(new Error('Historical order data is required for forecasting'), { status: 400 })
-  }
-
-  const response = await askGemini(`You are assisting a laundry business manager with a revenue-and-demand forecast.
->>>>>>> 728e40e (Fixed)
 Use only the supplied historical daily totals. Do not invent events, customers, or operational facts.
 
 Branch scope: ${branch || 'All branches'}
@@ -154,7 +139,6 @@ Rules:
 - Make conservative forecasts when history is sparse.
 - Provide 2 or 3 practical recommendations covering peak demand, staffing, inventory, service demand, or branch performance when supported by the data.
 - Do not use markdown.`)
-<<<<<<< HEAD
   } catch (error) {
     logGeminiFallback('forecasting', error)
   }
@@ -199,17 +183,6 @@ Rules:
   }
   const predictions = forecastDates.map(date => {
     const item = byDate.get(date)
-=======
-
-  if (!response.text) throw Object.assign(new Error('AI forecasting is currently unavailable'), { status: 503 })
-  const parsed = parseJson(response.text)
-  const byDate = new Map((parsed.predictions || []).map(item => [item.date, item]))
-  const predictions = forecastDates.map(date => {
-    const item = byDate.get(date)
-    if (!item || !Number.isFinite(Number(item.predictedRevenue)) || !Number.isFinite(Number(item.predictedOrders))) {
-      throw Object.assign(new Error('The AI forecast was incomplete'), { status: 502 })
-    }
->>>>>>> 728e40e (Fixed)
     return {
       date,
       predictedRevenue: Math.max(0, Math.round(Number(item.predictedRevenue))),
@@ -234,21 +207,14 @@ export async function generateDecisionSupport({ metrics, trendData, forecastData
     profit: Number(metrics?.profit) || 0,
     totalOrders: Number(metrics?.totalOrders) || 0,
     averageOrderValue: Number(metrics?.averageOrderValue) || 0,
-<<<<<<< HEAD
     operationalSignals: Array.isArray(metrics?.operationalSignals) ? metrics.operationalSignals.slice(0, 12) : [],
-=======
->>>>>>> 728e40e (Fixed)
   }
   const safeTrendData = Array.isArray(trendData) ? trendData.slice(-60) : []
   const safeForecastData = Array.isArray(forecastData) ? forecastData.slice(0, 30) : []
 
-<<<<<<< HEAD
   let response
   try {
     response = await askGemini(`You are an AI-assisted decision-support system for a multi-branch laundry business.
-=======
-  const response = await askGemini(`You are an AI-assisted decision-support system for a multi-branch laundry business.
->>>>>>> 728e40e (Fixed)
 Analyze only the supplied metrics, trend data, and forecast. Do not invent facts.
 
 Branch scope: ${branch || 'All branches'}
@@ -263,7 +229,6 @@ Return ONLY valid JSON in this exact format:
 
 Rules:
 - Return exactly 3 insights.
-<<<<<<< HEAD
 - Cover financial performance, service demand, and an operational recommendation for staffing, inventory, or branch productivity when the supplied signals support it.
 - State uncertainty when history is limited.
 - Avoid generic advice and markdown.`)
@@ -280,25 +245,13 @@ Rules:
     logGeminiFallback('decision-support response parsing', error)
     return { insights: localDecisionSupport(safeMetrics, safeForecastData), model: 'Local fallback', isFallback: true }
   }
-=======
-- Cover financial performance, forecast/service demand, and an operational recommendation for staffing, inventory, or branch productivity when data supports it.
-- State uncertainty when history is limited.
-- Avoid generic advice and markdown.`)
-
-  if (!response.text) throw Object.assign(new Error('AI decision support is currently unavailable'), { status: 503 })
-  const parsed = parseJson(response.text)
->>>>>>> 728e40e (Fixed)
   const insights = (parsed.insights || [])
     .filter(item => typeof item?.title === 'string' && typeof item?.description === 'string')
     .slice(0, 3)
 
-<<<<<<< HEAD
   if (insights.length !== 3) {
     logGeminiFallback('decision-support response validation')
     return { insights: localDecisionSupport(safeMetrics, safeForecastData), model: 'Local fallback', isFallback: true }
   }
-=======
-  if (insights.length !== 3) throw Object.assign(new Error('The AI decision-support response was incomplete'), { status: 502 })
->>>>>>> 728e40e (Fixed)
   return { insights, model: response.model }
 }

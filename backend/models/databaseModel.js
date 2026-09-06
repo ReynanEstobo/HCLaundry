@@ -21,16 +21,12 @@ function applyFilters(query, filters = []) {
   }, query)
 }
 
-<<<<<<< HEAD
 // Operational data must never cross a staff member's assigned branch. Branch
 // lookup/assignment is always performed on the server, not trusted from UI data.
 const BRANCH_SCOPED_TABLES = new Set([
   'orders', 'customers', 'inventory_items', 'inventory_usage_log',
   'inventory_restocks', 'expenses',
 ])
-=======
-const BRANCH_SCOPED_TABLES = new Set(['orders', 'customers'])
->>>>>>> 728e40e (Fixed)
 
 function restrictStaffBranchRequest(table, request, identity) {
   if (identity.role === 'admin') return request
@@ -45,41 +41,28 @@ function restrictStaffBranchRequest(table, request, identity) {
   })
 
   if (request.operation === 'insert') {
-<<<<<<< HEAD
     const applyInsert = payload => ({
       ...applyBranch(payload),
       ...(['orders', 'customers'].includes(table) ? { created_by_staff_id: identity.staffId } : {}),
     })
-=======
-    const applyInsert = payload => ({ ...applyBranch(payload), created_by_staff_id: identity.staffId })
->>>>>>> 728e40e (Fixed)
     scoped.payload = Array.isArray(request.payload) ? request.payload.map(applyInsert) : applyInsert(request.payload || {})
   }
   if (request.operation === 'update') {
     const { created_by_staff_id, ...updates } = request.payload || {}
-<<<<<<< HEAD
     scoped.payload = table === 'orders'
       ? { ...applyBranch(updates), last_updated_by_staff_id: identity.staffId }
       : applyBranch(updates)
-=======
-    scoped.payload = applyBranch(updates)
->>>>>>> 728e40e (Fixed)
   }
   return scoped
 }
 
-<<<<<<< HEAD
 async function attachAdminBranch(table, request, identity) {
-=======
-async function attachAdminBranch(table, request) {
->>>>>>> 728e40e (Fixed)
   if (!['insert', 'update'].includes(request.operation)) return request
 
   async function resolveBranch(payload) {
     // Payment/status-only updates retain the order's existing branch.
     if (!payload?.branch) {
       if (request.operation === 'insert') {
-<<<<<<< HEAD
         throw Object.assign(new Error(`Administrators must assign a branch when creating ${table.replaceAll('_', ' ')} records.`), { status: 400 })
       }
       return table === 'orders' ? { ...payload, last_updated_by_staff_id: identity.staffId } : payload
@@ -87,15 +70,6 @@ async function attachAdminBranch(table, request) {
     const { data: branch, error } = await database.from('branches').select('id, name').eq('name', payload.branch).maybeSingle()
     if (error || !branch) throw Object.assign(new Error('The selected branch does not exist.'), { status: 400 })
     return { ...payload, branch: branch.name, branch_id: branch.id, ...(table === 'orders' && request.operation === 'update' ? { last_updated_by_staff_id: identity.staffId } : {}) }
-=======
-        throw Object.assign(new Error(`Administrators must assign a branch when creating a ${table === 'orders' ? 'order' : 'customer'}.`), { status: 400 })
-      }
-      return payload
-    }
-    const { data: branch, error } = await database.from('branches').select('id, name').eq('name', payload.branch).maybeSingle()
-    if (error || !branch) throw Object.assign(new Error('The selected branch does not exist.'), { status: 400 })
-    return { ...payload, branch: branch.name, branch_id: branch.id }
->>>>>>> 728e40e (Fixed)
   }
 
   const payload = Array.isArray(request.payload)
@@ -104,7 +78,6 @@ async function attachAdminBranch(table, request) {
   return { ...request, payload }
 }
 
-<<<<<<< HEAD
 async function assertInventoryRecordOwnership(table, request, identity) {
   if (!['inventory_usage_log', 'inventory_restocks'].includes(table) || request.operation !== 'insert') return request
   const entries = Array.isArray(request.payload) ? request.payload : [request.payload]
@@ -119,20 +92,13 @@ async function assertInventoryRecordOwnership(table, request, identity) {
   return request
 }
 
-=======
->>>>>>> 728e40e (Fixed)
 export async function execute(table, request, identity) {
   if (!TABLES.has(table)) throw Object.assign(new Error('Unknown resource'), { status: 404 })
   if (BRANCH_SCOPED_TABLES.has(table)) {
     request = identity.role === 'admin'
-<<<<<<< HEAD
       ? await attachAdminBranch(table, request, identity)
       : restrictStaffBranchRequest(table, request, identity)
     request = await assertInventoryRecordOwnership(table, request, identity)
-=======
-      ? await attachAdminBranch(table, request)
-      : restrictStaffBranchRequest(table, request, identity)
->>>>>>> 728e40e (Fixed)
   }
   const { operation, selection = '*', filters, orders = [], range, limit, payload, count, single, returning } = request
   let query = database.from(table)
