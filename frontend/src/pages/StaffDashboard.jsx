@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useRealtime } from '../lib/useRealtime'
+import { PageError, PageLoader } from '../components/AsyncState'
 import {
   Clock, AlertTriangle, ShoppingBag, CheckCircle2, Timer, User, RefreshCw, Package
 } from 'lucide-react'
@@ -23,18 +24,26 @@ export default function StaffDashboard() {
   const [orders, setOrders] = useState([])
   const [inventory, setInventory] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
 
   const loadData = useCallback(async () => {
     setLoading(true)
-    const [ordersRes, inventoryRes] = await Promise.all([
-      supabase.from('orders').select('*, customers(name, phone), service_types(name)')
-        .not('status', 'in', '("released","cancelled")')
-        .order('created_at', { ascending: false }),
-      supabase.from('inventory_items').select('*, inventory_categories(name)')
-    ])
-    setOrders(ordersRes.data || [])
-    setInventory(inventoryRes.data || [])
-    setLoading(false)
+    setLoadError('')
+    try {
+      const [ordersRes, inventoryRes] = await Promise.all([
+        supabase.from('orders').select('*, customers(name, phone), service_types(name)')
+          .not('status', 'in', '("released","cancelled")')
+          .order('created_at', { ascending: false }),
+        supabase.from('inventory_items').select('*, inventory_categories(name)')
+      ])
+      if (ordersRes.error || inventoryRes.error) throw ordersRes.error || inventoryRes.error
+      setOrders(ordersRes.data || [])
+      setInventory(inventoryRes.data || [])
+    } catch (error) {
+      setLoadError(error.message || 'Unable to load your branch dashboard.')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
@@ -62,7 +71,8 @@ export default function StaffDashboard() {
   // Low stock
   const lowStockItems = inventory.filter(i => Number(i.current_stock) <= Number(i.minimum_stock))
 
-  if (loading) return <div className="loading-spinner"><div className="spinner" /></div>
+  if (loading) return <PageLoader label="Loading branch dashboard…" />
+  if (loadError) return <PageError message={loadError} onRetry={loadData} />
 
   return (
     <>

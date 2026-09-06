@@ -20,6 +20,13 @@ import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { sendEmail, sendSms } from "../services/api/notificationApi";
+<<<<<<< HEAD
+import { createBranchOrder, getVisibleCustomers, lookupCustomerByPhone } from "../services/api/operationsApi";
+import { useAuth } from "../context/AuthContext";
+import { PageError, PageLoader } from "../components/AsyncState";
+=======
+import { useAuth } from "../context/AuthContext";
+>>>>>>> 728e40e (Fixed)
 
 const STATUS_FLOW = [
   "pending",
@@ -55,6 +62,11 @@ const MACHINE_CAPACITY_DEFAULTS = {
   drying: 3,
   folding: 4,
 };
+const BRANCHES = [
+  "Main - Brgy 7",
+  "2nd Branch - Brgy Calzada",
+  "3rd Branch - Nasugbu",
+];
 
 function getStageDurations(settings) {
   return {
@@ -178,6 +190,8 @@ async function sendOrderReceivedEmail(
 }
 
 export default function Orders() {
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -190,8 +204,10 @@ export default function Orders() {
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const [customers, setCustomers] = useState([]);
+  const [serviceTypes, setServiceTypes] = useState([]);
   const [soapItems, setSoapItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [filter, setFilter] = useState("all");
@@ -229,13 +245,21 @@ export default function Orders() {
     customer_phone: "",
     customer_name: "",
     customer_email: "",
+    service_type_id: "",
     weight_kg: "",
     notes: "",
     payment_method: "cash",
     payment_status: "unpaid",
     amount_paid: "",
+    branch: "Main - Brgy 7",
     addons: {},
   });
+  // Staff data is already branch-scoped by the backend. Admins may create an
+  // order for any branch, so their add-on list is narrowed immediately when
+  // the branch selection changes.
+  const branchInventoryItems = isAdmin
+    ? soapItems.filter((item) => item.branch === form.branch)
+    : soapItems;
 
   const [phoneMatch, setPhoneMatch] = useState(null); // null = not searched, object = found, false = not found
 
@@ -294,6 +318,7 @@ export default function Orders() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
 
     // 👇 ADD THIS BLOCK
     let ordersQuery = supabase
@@ -309,13 +334,15 @@ export default function Orders() {
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
     // 👇 KEEP THIS (but replace first item)
-    const [ordersRes, custRes, soapRes] = await Promise.all([
+    try {
+    const [ordersRes, custRes, soapRes, servicesRes] = await Promise.all([
       ordersQuery,
-      supabase.from("customers").select("*").order("name"),
+      getVisibleCustomers(),
       supabase
         .from("inventory_items")
         .select("*, inventory_categories(name)")
         .order("name"),
+      supabase.from("service_types").select("*").eq("is_active", true).order("name"),
     ]);
 
     // 🔥 fetch ALL orders for search (no pagination)
@@ -324,13 +351,21 @@ export default function Orders() {
       .select("*, customers(name, phone, email)")
       .order("priority_order", { ascending: true });
 
+    const error = ordersRes.error || custRes.error || soapRes.error || servicesRes.error;
+    if (error) throw error;
+
     setAllOrders(allData || []);
 
     setOrders(ordersRes.data || []);
     setTotalCount(ordersRes.count || 0);
     setCustomers(custRes.data || []);
     setSoapItems(soapRes.data || []);
-    setLoading(false);
+    setServiceTypes(servicesRes.data || []);
+    } catch (error) {
+      setLoadError(error.message || "Unable to load order data.");
+    } finally {
+      setLoading(false);
+    }
   }, [page, filter]); // ✅ ADD THIS
 
   useEffect(() => {
@@ -473,11 +508,13 @@ export default function Orders() {
       customer_phone: "",
       customer_name: "",
       customer_email: "",
+      service_type_id: "",
       weight_kg: "",
       notes: "",
       payment_method: "cash",
       payment_status: "unpaid",
       amount_paid: "",
+      branch: "Main - Brgy 7",
       addons: {},
     });
     setPhoneMatch(null);
@@ -491,10 +528,12 @@ export default function Orders() {
       customer_phone: order.customers?.phone || "",
       customer_name: order.customers?.name || "",
       customer_email: order.customers?.email || "",
+      service_type_id: order.service_type_id || "",
       weight_kg: order.weight_kg,
       notes: order.notes || "",
       payment_method: order.payment_method || "cash",
       payment_status: order.payment_status,
+      branch: order.branch || "",
       amount_paid:
         order.amount_paid ??
         (order.payment_status === "paid"
@@ -513,11 +552,16 @@ export default function Orders() {
       setPhoneMatch(null);
       return;
     }
-    const { data } = await supabase
-      .from("customers")
-      .select("*")
-      .eq("phone", phone)
-      .maybeSingle();
+    // Check the central customer directory. Only branch-visible customer details
+    // are returned to staff, but a matching phone is still never duplicated.
+    let result;
+    try {
+      result = await lookupCustomerByPhone(phone);
+    } catch (error) {
+      toast.error(error.message || "Unable to check the client record");
+      return;
+    }
+    const data = result.customer || customers.find((customer) => customer.phone === phone) || null;
     if (data) {
       setPhoneMatch(data);
       setForm((f) => ({
@@ -527,7 +571,7 @@ export default function Orders() {
         customer_email: data.email || "",
       }));
     } else {
-      setPhoneMatch(false);
+      setPhoneMatch(result.exists ? { exists: true, crossBranch: true } : false);
       setForm((f) => ({
         ...f,
         customer_id: "",
@@ -543,6 +587,13 @@ export default function Orders() {
       return toast.error("Phone number is required");
     if (!form.customer_name.trim())
       return toast.error("Client name is required");
+<<<<<<< HEAD
+    if (!editing && serviceTypes.length > 0 && !form.service_type_id)
+      return toast.error("Please select a service type");
+=======
+>>>>>>> 728e40e (Fixed)
+    if (isAdmin && !form.branch)
+      return toast.error("Please assign this order to a branch");
 
     const weight = parseFloat(form.weight_kg);
     if (!weight || weight <= 0)
@@ -555,7 +606,7 @@ export default function Orders() {
     // Check stock for all add-ons
     if (!editing) {
       for (const [itemId, qty] of addonEntries) {
-        const item = soapItems.find((i) => i.id === itemId);
+        const item = branchInventoryItems.find((i) => i.id === itemId);
         if (!item) return toast.error("Selected item not found");
         if (item.current_stock < qty) {
           return toast.error(
@@ -584,6 +635,8 @@ export default function Orders() {
           ? "paid"
           : "partial";
 
+<<<<<<< HEAD
+=======
     // Auto-register customer if not found
     let customerId = form.customer_id;
     if (!customerId) {
@@ -601,6 +654,7 @@ export default function Orders() {
             name: form.customer_name.trim(),
             phone: form.customer_phone.trim(),
             email: form.customer_email.trim() || null,
+            ...(isAdmin && { branch: form.branch }),
           })
           .select("id")
           .single();
@@ -611,19 +665,23 @@ export default function Orders() {
       }
     }
 
+>>>>>>> 728e40e (Fixed)
     const totalEtaMinutes =
       (Number(settings.etawash) || 45) +
       (Number(settings.etadrying) || 40) +
       (Number(settings.etafolding) || 15);
 
     const payload = {
-      customer_id: customerId || null,
+      customer_id: form.customer_id || null,
+      service_type_id: form.service_type_id || null,
       weight_kg: weight,
       total_price,
       addons: form.addons, // ✅ now supported
       notes: form.notes,
       payment_method: form.payment_method,
       payment_status,
+      amount_paid: amountPaid,
+      ...(isAdmin && { branch: form.branch }),
 
       ...(!editing && { status: "pending" }),
     };
@@ -635,17 +693,26 @@ export default function Orders() {
         .update(payload)
         .eq("id", editing.id));
     } else {
-      const res = await supabase
-        .from("orders")
-        .insert(payload)
-        .select("id, order_number")
-        .single();
-      error = res.error;
-      orderData = res.data;
+      try {
+        const result = await createBranchOrder({
+          branch: isAdmin ? form.branch : undefined,
+          bundleKg: BUNDLE_KG,
+          customer: {
+            name: form.customer_name.trim(),
+            phone: form.customer_phone.trim(),
+            email: form.customer_email.trim() || null,
+          },
+          order: payload,
+          addons: form.addons,
+        });
+        orderData = result.data;
+      } catch (createError) {
+        error = { message: createError.message };
+      }
     }
 
     // If failed, might be due to missing amount_paid column - retry without it
-    if (error && amountPaid > 0) {
+    if (editing && error && amountPaid > 0) {
       // Try adding amount_paid in case the column exists
       const payloadWithPaid = { ...payload, amount_paid: amountPaid };
       if (editing) {
@@ -654,28 +721,18 @@ export default function Orders() {
           .update(payloadWithPaid)
           .eq("id", editing.id);
         if (!r.error) error = null;
-      } else {
-        const r = await supabase
-          .from("orders")
-          .insert(payloadWithPaid)
-          .select("id, order_number")
-          .single();
-        if (!r.error) {
-          error = null;
-          orderData = r.data;
-        }
       }
     }
 
     if (error) return toast.error(error.message);
 
     // Track stage start time for new orders
-    if (!editing && orderData) {
+    if (false && !editing && orderData) {
     }
 
-    // Deduct add-on items from inventory on new orders only
-    // ✅ Deduct inventory (default usage + add-ons combined)
-    if (!editing && orderData) {
+    // New orders are stock-validated and deducted atomically by the backend
+    // for the selected branch. This legacy client-side code remains disabled.
+    if (false && !editing && orderData) {
       try {
         // 🔥 1. Compute loads
         const loads = Math.ceil(weight / BUNDLE_KG);
@@ -992,12 +1049,8 @@ export default function Orders() {
       return (a.priority_order ?? 0) - (b.priority_order ?? 0);
     });
 
-  if (loading)
-    return (
-      <div className="loading-spinner">
-        <div className="spinner" />
-      </div>
-    );
+  if (loading) return <PageLoader label="Loading orders…" />;
+  if (loadError) return <PageError message={loadError} onRetry={loadData} />;
 
   return (
     <>
@@ -1102,6 +1155,17 @@ export default function Orders() {
                             <User size={11} />
                             <span>{order.customers?.name || "Walk-in"}</span>
                           </div>
+                          {isAdmin && (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "var(--text-muted)",
+                                marginTop: 4,
+                              }}
+                            >
+                              Branch: {order.branch || "Unassigned"}
+                            </div>
+                          )}
                           <div className="kanban-card-details">
                             <span className="kanban-card-kg">
                               {order.weight_kg}kg
@@ -1175,6 +1239,7 @@ export default function Orders() {
                 <tr>
                   <th>Order #</th>
                   <th>Customer</th>
+                  {isAdmin && <th>Branch</th>}
                   <th>Weight</th>
                   <th>Status</th>
                   <th>Time Left</th>
@@ -1187,7 +1252,7 @@ export default function Orders() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="empty-state">
+                    <td colSpan={isAdmin ? 10 : 9} className="empty-state">
                       <p>No orders found</p>
                     </td>
                   </tr>
@@ -1203,6 +1268,11 @@ export default function Orders() {
                         {order.order_number}
                       </td>
                       <td>{order.customers?.name || "Walk-in"}</td>
+                      {isAdmin && (
+                        <td style={{ fontSize: 13 }}>
+                          {order.branch || "Unassigned"}
+                        </td>
+                      )}
                       <td>{order.weight_kg} kg</td>
                       <td>
                         <div className="status-track">
@@ -1474,6 +1544,24 @@ export default function Orders() {
                 <div className="order-section">
                   <div className="order-section-title">Client & Service</div>
                   <div className="form-row">
+                    {serviceTypes.length > 0 && (
+                      <div className="form-group">
+                        <label>Service Type *</label>
+                        <select
+                          className="form-control"
+                          value={form.service_type_id}
+                          onChange={(e) => setForm((f) => ({ ...f, service_type_id: e.target.value }))}
+                          required={!editing}
+                        >
+                          <option value="">Select service</option>
+                          {serviceTypes.map((service) => (
+                            <option key={service.id} value={service.id}>
+                              {service.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="form-group">
                       <label>Phone Number *</label>
                       <input
@@ -1520,7 +1608,7 @@ export default function Orders() {
                             gap: 4,
                           }}
                         >
-                          <CheckCircle2 size={13} /> Existing client:{" "}
+                          <CheckCircle2 size={13} /> Existing central client:{" "}
                           {phoneMatch.name}
                         </div>
                       )}
@@ -1536,6 +1624,11 @@ export default function Orders() {
                             New client — will be registered automatically
                           </div>
                         )}
+                      {phoneMatch?.crossBranch && (
+                        <div style={{ marginTop: 4, fontSize: 12, color: "#2563eb" }}>
+                          Existing central client found — this order will be linked to this branch without creating a duplicate.
+                        </div>
+                      )}
                     </div>
                     <div className="form-group">
                       <label>Client Name *</label>
@@ -1553,6 +1646,30 @@ export default function Orders() {
                         disabled={!!(phoneMatch && phoneMatch.id)}
                       />
                     </div>
+                    {isAdmin && (
+                      <div className="form-group">
+                        <label>Branch *</label>
+                        <select
+                          className="form-control"
+                          value={form.branch}
+                          onChange={(e) =>
+<<<<<<< HEAD
+                            setForm((f) => ({ ...f, branch: e.target.value, addons: {} }))
+=======
+                            setForm((f) => ({ ...f, branch: e.target.value }))
+>>>>>>> 728e40e (Fixed)
+                          }
+                          required
+                        >
+                          <option value="">Select branch</option>
+                          {BRANCHES.map((branch) => (
+                            <option key={branch} value={branch}>
+                              {branch}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                   {/* Show email input for new clients */}
                   {phoneMatch === false && form.customer_phone.length >= 11 && (
@@ -1618,7 +1735,7 @@ export default function Orders() {
                     </span>
                   </div>
                   <div className="addon-grid">
-                    {soapItems.map((item) => {
+                    {branchInventoryItems.map((item) => {
                       const qty = form.addons[item.id] || 0;
                       const noStock = item.current_stock < 1 && qty === 0;
                       return (
@@ -1665,7 +1782,7 @@ export default function Orders() {
                         {Object.entries(form.addons)
                           .filter(([, qty]) => qty > 0)
                           .map(([id, qty]) => {
-                            const item = soapItems.find(
+                            const item = branchInventoryItems.find(
                               (i) => String(i.id) === String(id),
                             );
                             return `${item?.name || "Item"} ×${qty}`;
@@ -1712,7 +1829,7 @@ export default function Orders() {
                     {Object.entries(form.addons)
                       .filter(([, qty]) => qty > 0)
                       .map(([id, qty]) => {
-                        const item = soapItems.find((i) => i.id === id);
+                        const item = branchInventoryItems.find((i) => i.id === id);
                         return (
                           <div key={id} className="pricing-row">
                             <span>

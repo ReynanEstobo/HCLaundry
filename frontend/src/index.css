@@ -2875,6 +2875,50 @@ textarea.form-control {
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
+
+.analytics-report-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 160ms ease;
+}
+.analytics-report-button:hover { border-color: var(--primary); color: var(--primary); }
+.analytics-report-button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.analytics-report-button.primary:hover { background: var(--primary-hover); color: #fff; }
+
+/* Shared asynchronous page states */
+.async-state {
+  min-height: 320px;
+  padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--text-secondary);
+  animation: async-state-in .22s ease-out;
+}
+.async-state strong { color: var(--text-primary); font-size: 16px; margin-top: 14px; }
+.async-state span { font-size: 13px; margin-top: 6px; color: var(--text-muted); max-width: 380px; }
+.async-loader-orbit {
+  width: 46px; height: 46px; border-radius: 50%; position: relative;
+  border: 3px solid #dbeafe; border-top-color: #2ea7e0;
+  animation: async-spin .8s linear infinite;
+}
+.async-loader-dot { width: 9px; height: 9px; border-radius: 50%; background: #8b5cf6; position: absolute; right: 1px; top: 3px; }
+.async-error { min-height: 280px; border: 1px dashed #fecaca; border-radius: 14px; background: #fffafa; }
+.async-error-icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; color: #ef4444; background: #fee2e2; }
+.async-retry { margin-top: 18px; display: inline-flex; align-items: center; gap: 7px; }
+@keyframes async-spin { to { transform: rotate(360deg); } }
+@keyframes async-state-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes spin {
   to {
     transform: rotate(360deg);

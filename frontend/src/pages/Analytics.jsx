@@ -1,11 +1,15 @@
 import { format, subDays } from "date-fns";
 import {
   Building2,
+  Download,
   DollarSign,
   Lightbulb,
   Percent,
   ShoppingBag,
+  Printer,
   TrendingUp,
+  Users,
+  Timer,
   Wallet,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -23,7 +27,11 @@ import {
 } from "recharts";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
-import { askGemini } from "../services/geminiService";
+import { generateAiForecast, generateDecisionSupport } from "../services/geminiService";
+<<<<<<< HEAD
+import { PageError, PageLoader } from "../components/AsyncState";
+=======
+>>>>>>> 728e40e (Fixed)
 
 // ─── Custom tooltip ────────────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
@@ -128,6 +136,25 @@ function SubFilter({ value, onChange, options }) {
   );
 }
 
+function OperationalList({ icon, title, accent, empty, items }) {
+  return (
+    <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", background: "#fff" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", borderBottom: "1px solid #f1f5f9", color: accent }}>
+        {icon}
+        <span style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 750 }}>{title}</span>
+      </div>
+      <div style={{ padding: "6px 14px 10px" }}>
+        {items.length ? items.map((item, index) => (
+          <div key={item} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "9px 0", borderBottom: index + 1 === items.length ? "none" : "1px solid #f1f5f9", fontSize: 13, color: "var(--text-secondary)" }}>
+            <span style={{ flex: "0 0 auto", width: 20, height: 20, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700, color: accent, background: `${accent}14` }}>{index + 1}</span>
+            <span style={{ lineHeight: 1.45 }}>{item}</span>
+          </div>
+        )) : <div style={{ padding: "12px 0", fontSize: 13, color: "var(--text-muted)" }}>{empty}</div>}
+      </div>
+    </div>
+  );
+}
+
 export default function Analytics() {
   const [range, setRange] = useState("weekly");
 
@@ -144,8 +171,12 @@ export default function Analytics() {
   const [forecastData, setForecastData] = useState([]);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const [stats, setStats] = useState({});
+  const [operationalSummary, setOperationalSummary] = useState({
+    topServices: [], topBranches: [], staffPerformance: [], lowStockItems: [], repeatCustomers: 0, completedOrders: 0, averageTurnaroundHours: null,
+  });
 
   const [forecastLoading, setForecastLoading] = useState(false);
 
@@ -167,10 +198,12 @@ export default function Analytics() {
     if (descriptiveData.length > 0 && forecastData.length > 0) {
       generateAIInsights(orders, expenses);
     }
-  }, [forecastData, selectedBranch, range]);
+  }, [forecastData, selectedBranch, range, operationalSummary]);
 
   async function loadAnalytics() {
     setLoading(true);
+    setLoadError("");
+    try {
 
     const now = new Date();
 
@@ -192,7 +225,7 @@ export default function Analytics() {
 
     let orderQuery = supabase
       .from("orders")
-      .select("*")
+      .select("*, service_types(name)")
       .gte("created_at", startDate)
       .lte("created_at", endDate)
       .order("created_at", { ascending: true });
@@ -208,20 +241,30 @@ export default function Analytics() {
       expenseQuery = expenseQuery.eq("branch", selectedBranch);
     }
 
-    const [ordersRes, expensesRes] = await Promise.all([
+    let inventoryQuery = supabase.from("inventory_items").select("*");
+    if (selectedBranch !== "all") inventoryQuery = inventoryQuery.eq("branch", selectedBranch);
+    const [ordersRes, expensesRes, staffRes, inventoryRes] = await Promise.all([
       orderQuery,
       expenseQuery,
+      supabase.from("staff").select("id, full_name"),
+      inventoryQuery,
     ]);
+    const requestError = ordersRes.error || expensesRes.error || staffRes.error || inventoryRes.error;
+    if (requestError) throw requestError;
 
     const orderData = ordersRes.data || [];
     const expenseData = expensesRes.data || [];
+    const staffById = new Map((staffRes.data || []).map((staff) => [staff.id, staff.full_name || "Unassigned staff"]));
+    const inventoryData = inventoryRes.data || [];
 
     setOrders(orderData);
     setExpenses(expenseData);
 
-    const totalRevenue = orderData
-      .filter((o) => o.payment_status === "paid")
-      .reduce((s, o) => s + Number(o.total_price), 0);
+    // Revenue is cash actually recorded against the order, including partial
+    // payments, rather than only the price of fully paid orders.
+    const totalRevenue = orderData.reduce(
+      (s, o) => s + Number(o.amount_paid ?? (o.payment_status === "paid" ? o.total_price : 0)), 0,
+    );
 
     const totalExpenses = expenseData.reduce((s, e) => s + Number(e.amount), 0);
 
@@ -238,9 +281,52 @@ export default function Analytics() {
       totalOrders: orderData.length,
     });
 
+    const serviceTotals = new Map();
+    const customerVisits = new Map();
+    const branchTotals = new Map();
+    const staffTotals = new Map();
+    let completedOrders = 0;
+    let turnaroundTotalHours = 0;
+    orderData.forEach((order) => {
+      const serviceName = order.service_types?.name || "Unspecified service";
+      const current = serviceTotals.get(serviceName) || { name: serviceName, orders: 0, revenue: 0 };
+      current.orders += 1;
+      current.revenue += Number(order.amount_paid ?? 0);
+      serviceTotals.set(serviceName, current);
+      if (order.customer_id) customerVisits.set(order.customer_id, (customerVisits.get(order.customer_id) || 0) + 1);
+      const branchRecord = branchTotals.get(order.branch || "Unassigned") || { name: order.branch || "Unassigned", orders: 0, revenue: 0 };
+      branchRecord.orders += 1;
+      branchRecord.revenue += Number(order.amount_paid ?? 0);
+      branchTotals.set(branchRecord.name, branchRecord);
+      const staffId = order.completed_by_staff_id || order.created_by_staff_id;
+      if (staffId) {
+        const staffRecord = staffTotals.get(staffId) || { name: staffById.get(staffId) || "Unassigned staff", completed: 0, created: 0 };
+        staffRecord.created += 1;
+        if (order.status === "released") staffRecord.completed += 1;
+        staffTotals.set(staffId, staffRecord);
+      }
+      if (order.status === "released") {
+        completedOrders += 1;
+        if (order.created_at && order.updated_at) turnaroundTotalHours += Math.max(0, (new Date(order.updated_at) - new Date(order.created_at)) / 3600000);
+      }
+    });
+    setOperationalSummary({
+      topServices: [...serviceTotals.values()].sort((a, b) => b.revenue - a.revenue || b.orders - a.orders).slice(0, 3),
+      topBranches: [...branchTotals.values()].sort((a, b) => b.revenue - a.revenue || b.orders - a.orders).slice(0, 3),
+      staffPerformance: [...staffTotals.values()].sort((a, b) => b.completed - a.completed || b.created - a.created).slice(0, 3),
+      lowStockItems: inventoryData.filter((item) => Number(item.current_stock) <= Number(item.minimum_stock)).slice(0, 5),
+      repeatCustomers: [...customerVisits.values()].filter((visits) => visits > 1).length,
+      completedOrders,
+      averageTurnaroundHours: completedOrders ? turnaroundTotalHours / completedOrders : null,
+    });
+
     generateForecast(orderData);
 
-    setLoading(false);
+    } catch (error) {
+      setLoadError(error.message || "Unable to load analytics data.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function getDescriptiveData() {
@@ -303,8 +389,6 @@ export default function Analytics() {
     // REVENUE
     // ─────────────────────────────────────
     orders.forEach((o) => {
-      if (o.payment_status !== "paid") return;
-
       const d = new Date(o.created_at);
 
       let key;
@@ -320,7 +404,7 @@ export default function Analytics() {
       const found = baseData.find((x) => x.date === key);
 
       if (found) {
-        found.revenue += Number(o.total_price);
+        found.revenue += Number(o.amount_paid ?? (o.payment_status === "paid" ? o.total_price : 0));
       }
     });
 
@@ -350,6 +434,30 @@ export default function Analytics() {
     return baseData;
   }
 
+  function buildDailyHistory(orderData) {
+    const totals = new Map();
+    orderData.forEach((order) => {
+      const date = format(new Date(order.created_at), "yyyy-MM-dd");
+      const day = totals.get(date) || { date, revenue: 0, orders: 0, paidOrders: 0 };
+      day.orders += 1;
+<<<<<<< HEAD
+      if (Number(order.amount_paid ?? (order.payment_status === "paid" ? order.total_price : 0)) > 0) {
+        day.revenue += Number(order.amount_paid ?? (order.payment_status === "paid" ? order.total_price : 0)) || 0;
+=======
+      if (order.payment_status === "paid") {
+        day.revenue += Number(order.total_price) || 0;
+>>>>>>> 728e40e (Fixed)
+        day.paidOrders += 1;
+      }
+      totals.set(date, day);
+    });
+<<<<<<< HEAD
+
+=======
+>>>>>>> 728e40e (Fixed)
+    return [...totals.values()].sort((a, b) => a.date.localeCompare(b.date));
+  }
+
   async function generateForecast(orderData) {
     try {
       setForecastLoading(true);
@@ -360,18 +468,17 @@ export default function Analytics() {
       const historicalRevenue = [];
 
       orderData.forEach((o) => {
-        if (o.payment_status !== "paid") return;
-
-        historicalRevenue.push(Number(o.total_price));
+        historicalRevenue.push(Number(o.amount_paid ?? (o.payment_status === "paid" ? o.total_price : 0)));
       });
 
       // ─────────────────────────────────────
       // COMPUTE MOVING AVERAGE
       // ─────────────────────────────────────
+      const dailyHistory = buildDailyHistory(orderData);
       const averageRevenue =
-        historicalRevenue.length > 0
-          ? historicalRevenue.reduce((a, b) => a + b, 0) /
-            historicalRevenue.length
+        dailyHistory.length > 0
+          ? dailyHistory.reduce((sum, day) => sum + day.revenue, 0) /
+            dailyHistory.length
           : 0;
 
       const today = new Date();
@@ -418,7 +525,7 @@ export default function Analytics() {
         const growthRate =
           range === "weekly" ? 0.01 : range === "monthly" ? 0.025 : 0.08;
 
-        const fluctuation = Math.random() * 0.08 - 0.04;
+        const fluctuation = 0;
 
         const predictedRevenue = Math.round(
           averageRevenue * (1 + i * growthRate + fluctuation),
@@ -446,6 +553,7 @@ export default function Analytics() {
 
         futureForecast.push({
           date: label,
+          forecastDate: format(futureDate, "yyyy-MM-dd"),
           predicted: predictedRevenue,
           isPrediction: true,
         });
@@ -456,7 +564,79 @@ export default function Analytics() {
       // ─────────────────────────────────────
       setForecastData(futureForecast);
 
-      setForecastModel("Moving Average Forecast");
+      setForecastModel("Trend baseline (AI loading)");
+
+      // Reuse a recent result when the branch, range, history, and forecast
+      // horizon are unchanged. This avoids charging a Gemini request each time
+      // the Analytics page is opened.
+      const forecastVersion = `${dailyHistory.map((day) => `${day.date}:${day.revenue}:${day.orders}`).join("|")}_${futureForecast.map((item) => item.forecastDate).join("|")}`;
+<<<<<<< HEAD
+      // v2 intentionally ignores prior cached labels from before the
+      // resilient forecast response format was introduced.
+      const forecastCacheKey = `ai_forecast_v2_${selectedBranch}_${range}_${forecastVersion}`;
+=======
+      const forecastCacheKey = `ai_forecast_v1_${selectedBranch}_${range}_${forecastVersion}`;
+>>>>>>> 728e40e (Fixed)
+      const cachedForecast = localStorage.getItem(forecastCacheKey);
+      const cachedForecastTime = localStorage.getItem(`${forecastCacheKey}_time`);
+      const SIX_HOURS = 6 * 60 * 60 * 1000;
+
+      if (
+        cachedForecast &&
+        cachedForecastTime &&
+        Date.now() - Number(cachedForecastTime) < SIX_HOURS
+      ) {
+        try {
+          const parsedCache = JSON.parse(cachedForecast);
+          if (Array.isArray(parsedCache.data) && parsedCache.data.length) {
+            setForecastData(parsedCache.data);
+            setForecastModel(parsedCache.model || "Gemini-assisted forecast (cached)");
+            return;
+          }
+        } catch {
+          localStorage.removeItem(forecastCacheKey);
+          localStorage.removeItem(`${forecastCacheKey}_time`);
+        }
+      }
+
+      try {
+        const aiForecast = await generateAiForecast({
+          history: dailyHistory,
+          forecastDates: futureForecast.map((item) => item.forecastDate),
+          branch: selectedBranch,
+          range,
+        });
+        const normalizedForecast = aiForecast.predictions.map((prediction) => ({
+            date:
+              range === "yearly"
+                ? format(new Date(prediction.date), "yyyy")
+                : range === "monthly"
+                  ? format(new Date(prediction.date), "MMM dd")
+                  : format(new Date(prediction.date), "EEE"),
+            forecastDate: prediction.date,
+            predicted: prediction.predictedRevenue,
+            predictedOrders: prediction.predictedOrders,
+            confidence: prediction.confidence,
+            isPrediction: true,
+          }));
+        const modelLabel = aiForecast.method || `Gemini-assisted forecast (${aiForecast.model})`;
+        setForecastData(normalizedForecast);
+        setForecastModel(modelLabel);
+        localStorage.setItem(
+          forecastCacheKey,
+          JSON.stringify({ data: normalizedForecast, model: modelLabel }),
+        );
+        localStorage.setItem(`${forecastCacheKey}_time`, Date.now().toString());
+        if (aiForecast.insights?.length) setAiInsights(aiForecast.insights);
+      } catch (aiError) {
+<<<<<<< HEAD
+        console.warn("Forecast service failed; keeping the local trend baseline.", aiError.message);
+        setForecastModel("Local trend baseline · low confidence");
+=======
+        console.warn("AI forecast unavailable; using trend baseline.", aiError.message);
+        setForecastModel("Trend baseline (AI unavailable)");
+>>>>>>> 728e40e (Fixed)
+      }
     } catch (err) {
       console.error(err);
 
@@ -469,7 +649,8 @@ export default function Analytics() {
     try {
       setAiLoading(true);
 
-      const cacheKey = `ai_insights_${selectedBranch}_${range}`;
+      const analyticsVersion = `${orderData.length}-${expenseData.length}-${stats.totalRevenue || 0}-${stats.totalExpenses || 0}-${forecastData.map((item) => item.predicted).join(",")}`;
+      const cacheKey = `ai_insights_${selectedBranch}_${range}_${analyticsVersion}`;
 
       const cached = localStorage.getItem(cacheKey);
 
@@ -498,6 +679,38 @@ export default function Analytics() {
 
       const profit = stats.profit || 0;
 
+      const dssResult = await generateDecisionSupport({
+        metrics: {
+          totalRevenue: revenue,
+          totalExpenses: expenses,
+          profit,
+          totalOrders: orderData.length,
+          averageOrderValue: stats.avgOrderValue || 0,
+<<<<<<< HEAD
+          operationalSignals: [
+            ...operationalSummary.topServices.map((service) => `Service ${service.name}: ${service.orders} orders, ₱${service.revenue.toLocaleString()} received.`),
+            ...operationalSummary.topBranches.map((branchMetric) => `Branch ${branchMetric.name}: ${branchMetric.orders} orders, ₱${branchMetric.revenue.toLocaleString()} received.`),
+            ...operationalSummary.staffPerformance.map((staff) => `${staff.name}: ${staff.completed} released, ${staff.created} created orders.`),
+            ...operationalSummary.lowStockItems.map((item) => `Low stock: ${item.name} has ${item.current_stock} ${item.unit} left at ${item.branch || "the selected branch"}.`),
+            `Repeat customers in the selected scope: ${operationalSummary.repeatCustomers}.`,
+            `Released orders: ${operationalSummary.completedOrders}.`,
+            operationalSummary.averageTurnaroundHours == null ? "Turnaround time is not yet available." : `Average released-order turnaround: ${operationalSummary.averageTurnaroundHours.toFixed(1)} hours.`,
+          ],
+=======
+>>>>>>> 728e40e (Fixed)
+        },
+        trendData: chartData,
+        forecastData,
+        branch: selectedBranch,
+        range,
+      });
+
+      setAiInsights(dssResult.insights);
+      localStorage.setItem(cacheKey, JSON.stringify(dssResult.insights));
+      localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+      return;
+
+      /* Legacy free-form DSS prompt retained only as a reference.
       const aiResult = await askGemini(`
 You are an AI-Based Decision Support System for I&C Laundry Hub.
 
@@ -555,6 +768,7 @@ Rules:
       localStorage.setItem(cacheKey, JSON.stringify(parsed.insights || []));
 
       localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+      */
     } catch (err) {
       console.error(err);
 
@@ -581,6 +795,74 @@ Rules:
   }
 
   const descriptiveData = getDescriptiveData();
+
+  const reportScope = selectedBranch === "all" ? "All branches" : selectedBranch;
+  const reportPeriod = customRange.start && customRange.end
+    ? `${customRange.start} to ${customRange.end}`
+    : `${range.charAt(0).toUpperCase()}${range.slice(1)} view`;
+  const peso = (value) => `₱${(Number(value) || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const csvCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+  const html = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+
+  function downloadReportCsv() {
+    const rows = [
+      ["4J Laundry Analytics Report"],
+      ["Scope", reportScope],
+      ["Period", reportPeriod],
+      ["Generated", new Date().toLocaleString("en-PH")],
+      [],
+      ["Summary"],
+      ["Total Revenue", stats.totalRevenue || 0],
+      ["Total Expenses", stats.totalExpenses || 0],
+      ["Net Profit", stats.profit || 0],
+      ["Total Orders", stats.totalOrders || 0],
+      [],
+      ["Revenue and Expense Trend"],
+      ["Period", "Revenue (PHP)", "Expenses (PHP)"],
+      ...descriptiveData.map((item) => [item.date, item.revenue || 0, item.expenses || 0]),
+      [],
+      ["Revenue Forecast"],
+      ["Forecast Date", "Predicted Revenue (PHP)", "Predicted Orders", "Confidence"],
+      ...forecastData.map((item) => [item.forecastDate || item.date, item.predicted || 0, item.predictedOrders || 0, item.confidence || "low"]),
+      [],
+      ["High-Performing Services"],
+      ["Service", "Orders", "Revenue Received (PHP)"],
+      ...operationalSummary.topServices.map((item) => [item.name, item.orders, item.revenue]),
+      [],
+      ["Branch Performance"],
+      ["Branch", "Orders", "Revenue Received (PHP)"],
+      ...operationalSummary.topBranches.map((item) => [item.name, item.orders, item.revenue]),
+      [],
+      ["Decision Support Insights"],
+      ...aiInsights.map((item) => [item.title, item.description]),
+    ];
+    const blob = new Blob([rows.map((row) => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `4j-laundry-analytics-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  function printReport() {
+    // `noopener` in the feature string can make window.open return null in
+    // Chromium, which prevented the report from ever being written.
+    const popup = window.open("", "_blank");
+    if (!popup) return window.alert("Allow pop-ups to print or save this report as PDF.");
+    popup.opener = null;
+    const insightMarkup = aiInsights.length
+      ? aiInsights.map((item) => `<li><strong>${html(item.title)}:</strong> ${html(item.description)}</li>`).join("")
+      : "<li>No decision-support insights are available for this scope.</li>";
+    const serviceRows = operationalSummary.topServices.map((item) => `<tr><td>${html(item.name)}</td><td>${item.orders}</td><td>${peso(item.revenue)}</td></tr>`).join("") || "<tr><td colspan=\"3\">No service data</td></tr>";
+    const branchRows = operationalSummary.topBranches.map((item) => `<tr><td>${html(item.name)}</td><td>${item.orders}</td><td>${peso(item.revenue)}</td></tr>`).join("") || "<tr><td colspan=\"3\">No branch data</td></tr>";
+    popup.document.write(`<!doctype html><html><head><title>4J Laundry Analytics Report</title><style>body{font-family:Arial,sans-serif;color:#172033;padding:32px;line-height:1.45}h1{color:#0f8fc4;margin:0}h2{font-size:16px;margin:28px 0 10px}.meta{color:#667085}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}.card{border:1px solid #dbe3ec;border-radius:8px;padding:12px}.label{color:#667085;font-size:12px}.value{font-size:19px;font-weight:700;margin-top:4px}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #dbe3ec;padding:8px;text-align:left;font-size:13px}th{background:#f3f8fb}li{margin:9px 0}@media print{body{padding:0}}</style></head><body><h1>4J Laundry Analytics Report</h1><p class=\"meta\"><strong>Scope:</strong> ${html(reportScope)} &nbsp; | &nbsp; <strong>Period:</strong> ${html(reportPeriod)}<br><strong>Generated:</strong> ${html(new Date().toLocaleString("en-PH"))}</p><div class=\"cards\"><div class=\"card\"><div class=\"label\">Total Revenue</div><div class=\"value\">${peso(stats.totalRevenue)}</div></div><div class=\"card\"><div class=\"label\">Total Expenses</div><div class=\"value\">${peso(stats.totalExpenses)}</div></div><div class=\"card\"><div class=\"label\">Net Profit</div><div class=\"value\">${peso(stats.profit)}</div></div><div class=\"card\"><div class=\"label\">Total Orders</div><div class=\"value\">${stats.totalOrders || 0}</div></div></div><h2>High-Performing Services</h2><table><tr><th>Service</th><th>Orders</th><th>Revenue Received</th></tr>${serviceRows}</table><h2>Branch Performance</h2><table><tr><th>Branch</th><th>Orders</th><th>Revenue Received</th></tr>${branchRows}</table><h2>AI-Assisted Decision Support</h2><ul>${insightMarkup}</ul><p class=\"meta\">Forecast method: ${html(forecastModel || "Not available")}</p></body></html>`);
+    popup.document.close();
+    popup.focus();
+    window.setTimeout(() => popup.print(), 250);
+  }
+
+  if (loading) return <PageLoader label="Preparing analytics…" />;
+  if (loadError) return <PageError message={loadError} onRetry={loadAnalytics} />;
 
   return (
     <>
@@ -661,6 +943,15 @@ Rules:
             { value: "yearly", label: "Yearly" },
           ]}
         />
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" onClick={downloadReportCsv} className="analytics-report-button">
+            <Download size={16} /> Export CSV
+          </button>
+          <button type="button" onClick={printReport} className="analytics-report-button primary">
+            <Printer size={16} /> Print / PDF
+          </button>
+        </div>
       </div>
 
       {/* STATS */}
@@ -707,6 +998,42 @@ Rules:
           <div className="stat-value">{stats.totalOrders}</div>
 
           <div className="stat-label">Total Orders</div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 24, padding: 24 }}>
+        <div className="card-header" style={{ marginBottom: 20, alignItems: "flex-start" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 5 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", color: "#fff", background: "linear-gradient(135deg, #0ea5e9, #2563eb)" }}>
+                <TrendingUp size={18} />
+              </div>
+              <h3 style={{ margin: 0 }}>Operational Performance</h3>
+            </div>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--text-muted)" }}>Service demand, client retention, and branch productivity for the selected scope.</p>
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#2563eb", background: "#eff6ff", borderRadius: 999, padding: "6px 10px" }}>Live operational summary</span>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 18 }}>
+          {[
+            { label: "Repeat Customers", value: operationalSummary.repeatCustomers, icon: Users, color: "#0ea5e9", bg: "#e0f2fe" },
+            { label: "Released Orders", value: operationalSummary.completedOrders, icon: ShoppingBag, color: "#10b981", bg: "#dcfce7" },
+            { label: "Average Turnaround", value: operationalSummary.averageTurnaroundHours == null ? "—" : `${operationalSummary.averageTurnaroundHours.toFixed(1)}h`, icon: Timer, color: "#8b5cf6", bg: "#f3e8ff" },
+          ].map((metric) => {
+            const Icon = metric.icon;
+            return <div key={metric.label} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16, background: "#fff" }}>
+              <div style={{ width: 32, height: 32, borderRadius: 9, display: "grid", placeItems: "center", color: metric.color, background: metric.bg, marginBottom: 12 }}><Icon size={17} /></div>
+              <div style={{ fontSize: 24, lineHeight: 1, fontWeight: 750, color: "var(--text-primary)", marginBottom: 7 }}>{metric.value}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".04em" }}>{metric.label}</div>
+            </div>;
+          })}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(245px, 1fr))", gap: 14 }}>
+          <OperationalList icon={<TrendingUp size={17} />} title="High-Performing Services" accent="#8b5cf6" empty="No service data yet" items={operationalSummary.topServices.map((service) => `${service.name} · ${service.orders} orders · ₱${service.revenue.toLocaleString()}`)} />
+          <OperationalList icon={<Building2 size={17} />} title="Top Branches" accent="#0ea5e9" empty="No branch data yet" items={operationalSummary.topBranches.map((branchMetric) => `${branchMetric.name} · ${branchMetric.orders} orders · ₱${branchMetric.revenue.toLocaleString()}`)} />
+          <OperationalList icon={<Users size={17} />} title="Staff Productivity" accent="#10b981" empty="No staff activity yet" items={operationalSummary.staffPerformance.map((staff) => `${staff.name} · ${staff.completed} released / ${staff.created} handled`)} />
         </div>
       </div>
 
@@ -771,12 +1098,37 @@ Rules:
               style={{
                 fontSize: 12,
                 color: "#6b7280",
+                maxWidth: 260,
+                textAlign: "right",
+                lineHeight: 1.35,
+                margin: 0,
               }}
             >
               Predictive Analytics · {forecastModel}
             </p>
           </div>
 
+          {forecastLoading ? (
+            <div
+              style={{
+                height: 280,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 12,
+                color: "#6b7280",
+              }}
+            >
+              <div className="spinner" />
+              <strong style={{ color: "#5b21b6" }}>
+                Generating AI revenue forecast
+              </strong>
+              <span style={{ fontSize: 13 }}>
+                Analyzing historical revenue and laundry demand in PHP…
+              </span>
+            </div>
+          ) : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={forecastData}>
               <CartesianGrid
@@ -796,6 +1148,7 @@ Rules:
               <Bar dataKey="predicted" fill="#8b5cf6" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          )}
         </div>
 
         {/* AI DSS */}
@@ -840,6 +1193,24 @@ Rules:
               gap: 14,
             }}
           >
+            {aiLoading && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  color: "#6d28d9",
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                <div
+                  className="spinner"
+                  style={{ width: 20, height: 20, borderWidth: 2 }}
+                />
+                AI is analyzing PHP revenue, demand, and operations…
+              </div>
+            )}
             {aiLoading
               ? [...Array(3)].map((_, i) => (
                   <div

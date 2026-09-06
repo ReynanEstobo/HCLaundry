@@ -4,11 +4,26 @@ import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
+import { useAuth } from "../context/AuthContext";
+<<<<<<< HEAD
+import { getVisibleCustomers, registerBranchCustomer } from "../services/api/operationsApi";
+import { PageError, PageLoader } from "../components/AsyncState";
+=======
+>>>>>>> 728e40e (Fixed)
+
+const BRANCHES = [
+  "Main - Brgy 7",
+  "2nd Branch - Brgy Calzada",
+  "3rd Branch - Nasugbu",
+];
 
 export default function Customers() {
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
   const [customers, setCustomers] = useState([]);
   const [allCustomers, setAllCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
@@ -17,6 +32,7 @@ export default function Customers() {
     phone: "",
     email: "",
     notes: "",
+    branch: "Main - Brgy 7",
   });
   // 🔥 PAGINATION STATES
   const [page, setPage] = useState(0);
@@ -27,23 +43,22 @@ export default function Customers() {
 
   const loadCustomers = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
 
-    let query = supabase
-      .from("customers")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
-    const { data, count } = await query;
-
-    const { data: allData } = await supabase
-      .from("customers")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    setCustomers(data || []);
-    setAllCustomers(allData || []);
-    setTotalCount(count || 0);
+    try {
+      // Admin receives the master client directory. Staff receive only clients
+      // associated with their branch through customer_branches.
+      const { data: allData = [] } = await getVisibleCustomers();
+      const sorted = [...allData].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setCustomers(sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE));
+      setAllCustomers(sorted);
+      setTotalCount(sorted.length);
+    } catch (error) {
+      setLoadError(error.message || "Unable to load client records.");
+      setCustomers([]);
+      setAllCustomers([]);
+      setTotalCount(0);
+    }
 
     setLoading(false);
   }, [page]);
@@ -59,7 +74,13 @@ export default function Customers() {
 
   function openNew() {
     setEditing(null);
-    setForm({ name: "", phone: "", email: "", notes: "" });
+    setForm({
+      name: "",
+      phone: "",
+      email: "",
+      notes: "",
+      branch: "Main - Brgy 7",
+    });
     setShowModal(true);
   }
 
@@ -70,6 +91,7 @@ export default function Customers() {
       phone: cust.phone,
       email: cust.email || "",
       notes: cust.notes || "",
+      branch: cust.branch || "",
     });
     setShowModal(true);
   }
@@ -78,6 +100,8 @@ export default function Customers() {
     e.preventDefault();
     if (!form.name.trim() || !form.phone.trim())
       return toast.error("Name and phone are required");
+    if (isAdmin && !form.branch)
+      return toast.error("Please assign this customer to a branch");
 
     let error;
     if (editing) {
@@ -86,7 +110,14 @@ export default function Customers() {
         .update(form)
         .eq("id", editing.id));
     } else {
-      ({ error } = await supabase.from("customers").insert(form));
+      try {
+        await registerBranchCustomer({
+          ...form,
+          ...(isAdmin ? { branch: form.branch } : {}),
+        });
+      } catch (registerError) {
+        error = { message: registerError.message };
+      }
     }
     if (error) return toast.error(error.message);
     toast.success(editing ? "Customer updated!" : "Customer added!");
@@ -117,12 +148,8 @@ export default function Customers() {
     );
   });
 
-  if (loading)
-    return (
-      <div className="loading-spinner">
-        <div className="spinner" />
-      </div>
-    );
+  if (loading) return <PageLoader label="Loading clients…" />;
+  if (loadError) return <PageError message={loadError} onRetry={loadCustomers} />;
 
   return (
     <>
@@ -157,6 +184,7 @@ export default function Customers() {
                 <th>Name</th>
                 <th>Phone</th>
                 <th>Email</th>
+                {isAdmin && <th>Branch</th>}
                 <th>Added</th>
                 <th>Actions</th>
               </tr>
@@ -164,7 +192,7 @@ export default function Customers() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="empty-state">
+                  <td colSpan={isAdmin ? 6 : 5} className="empty-state">
                     <p>No customers found</p>
                   </td>
                 </tr>
@@ -188,6 +216,7 @@ export default function Customers() {
                       </span>
                     </td>
                     <td>{c.email || "—"}</td>
+                    {isAdmin && <td>{c.branch || "Unassigned"}</td>}
                     <td style={{ fontSize: 13, color: "var(--text-muted)" }}>
                       {format(new Date(c.created_at), "MMM d, yyyy")}
                     </td>
@@ -342,6 +371,26 @@ export default function Customers() {
                     }
                   />
                 </div>
+                {isAdmin && (
+                  <div className="form-group">
+                    <label>Branch *</label>
+                    <select
+                      className="form-control"
+                      value={form.branch}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, branch: e.target.value }))
+                      }
+                      required
+                    >
+                      <option value="">Select branch</option>
+                      {BRANCHES.map((branch) => (
+                        <option key={branch} value={branch}>
+                          {branch}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="form-group">
                   <label>Notes</label>
                   <textarea

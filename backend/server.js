@@ -1,12 +1,14 @@
 import 'dotenv/config'
 import http from 'node:http'
 import { URL } from 'node:url'
-import { authenticate } from './middleware/authenticate.js'
+import { authenticate, requireAdmin } from './middleware/authenticate.js'
 import { handleData } from './controllers/dataController.js'
+import { createOrder, restockInventory } from './controllers/operationController.js'
+import { listVisibleCustomers, lookupCustomer, registerCustomer } from './controllers/customerController.js'
 import { login, signUp, getMe, updatePassword } from './controllers/authController.js'
 import { getPublicSettings, trackOrder } from './controllers/publicController.js'
 import { sendEmail, sendSms } from './services/notificationService.js'
-import { askGemini } from './services/aiService.js'
+import { askGemini, generateForecast, generateDecisionSupport } from './services/aiService.js'
 import { events } from './services/realtimeService.js'
 import { resourceRoutes } from './routes/resourceRoutes.js'
 
@@ -43,19 +45,26 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/health') return write(response, 200, { status: 'ok' })
     if (request.method === 'GET' && url.pathname === '/api/events') return streamEvents(request, response)
     if (request.method === 'POST' && path === 'auth/login') return write(response, 200, await login(await readBody(request)))
-    if (request.method === 'POST' && path === 'auth/signup') { await authenticate(request); return write(response, 200, await signUp(await readBody(request))) }
+    if (request.method === 'POST' && path === 'auth/signup') { requireAdmin(await authenticate(request)); return write(response, 200, await signUp(await readBody(request))) }
     if (request.method === 'GET' && path === 'auth/me') return write(response, 200, await getMe(await authenticate(request)))
     if (request.method === 'PATCH' && path === 'auth/password') return write(response, 200, await updatePassword(await readBody(request)))
-    if (request.method === 'POST' && path === 'notifications/email') return write(response, 200, await sendEmail(await readBody(request)))
-    if (request.method === 'POST' && path === 'notifications/sms') return write(response, 200, await sendSms(await readBody(request)))
+    if (request.method === 'POST' && path === 'notifications/email') { await authenticate(request); return write(response, 200, await sendEmail(await readBody(request))) }
+    if (request.method === 'POST' && path === 'notifications/sms') { await authenticate(request); return write(response, 200, await sendSms(await readBody(request))) }
     if (request.method === 'POST' && path === 'ai/generate') { await authenticate(request); return write(response, 200, await askGemini((await readBody(request)).prompt)) }
+    if (request.method === 'POST' && path === 'ai/forecast') { requireAdmin(await authenticate(request)); return write(response, 200, await generateForecast(await readBody(request))) }
+    if (request.method === 'POST' && path === 'ai/dss') { requireAdmin(await authenticate(request)); return write(response, 200, await generateDecisionSupport(await readBody(request))) }
     if (request.method === 'GET' && path === 'public/orders/track') return write(response, 200, await trackOrder(url.searchParams.get('q')))
     if (request.method === 'GET' && path === 'public/settings') return write(response, 200, await getPublicSettings())
+    if (request.method === 'POST' && path === 'orders/create') return write(response, 200, await createOrder(await readBody(request), await authenticate(request)))
+    if (request.method === 'POST' && path === 'inventory/restock') return write(response, 200, await restockInventory(await readBody(request), await authenticate(request)))
+    if (request.method === 'GET' && path === 'customers/visible') return write(response, 200, await listVisibleCustomers(await authenticate(request)))
+    if (request.method === 'GET' && path === 'customers/lookup') return write(response, 200, await lookupCustomer(url.searchParams.get('phone'), await authenticate(request)))
+    if (request.method === 'POST' && path === 'customers/register') return write(response, 200, await registerCustomer(await readBody(request), await authenticate(request)))
 
     const table = resourceRoutes.get(path)
     if (table && request.method === 'POST') {
-      await authenticate(request)
-      return write(response, 200, await handleData(table, await readBody(request)))
+      const identity = await authenticate(request)
+      return write(response, 200, await handleData(table, await readBody(request), identity))
     }
     return write(response, 404, { error: 'Endpoint not found' })
   } catch (error) {

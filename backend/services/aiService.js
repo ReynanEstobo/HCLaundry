@@ -1,18 +1,40 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro']
+<<<<<<< HEAD
+// Prefer the stable Flash models. Availability can still vary by Gemini
+// project, region, quota, or provider status, so the service has a local
+// deterministic fallback instead of failing the Analytics page.
+const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.6-flash']
+=======
+// Keep the currently supported model first; older names are retained only as
+// fallbacks for projects whose Gemini availability differs by region/account.
+const models = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite']
+>>>>>>> 728e40e (Fixed)
 const cooldowns = new Map()
+const responseCache = new Map()
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000
+const MAX_CACHE_ENTRIES = 100
 
 export async function askGemini(prompt) {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw Object.assign(new Error('Gemini API key is not configured'), { status: 500 })
+  const cached = responseCache.get(prompt)
+  if (cached && Date.now() - cached.createdAt < CACHE_TTL_MS) return cached.value
+  if (cached) responseCache.delete(prompt)
+
   const client = new GoogleGenerativeAI(key)
   for (const modelName of models) {
     if (Date.now() - (cooldowns.get(modelName) || 0) < 5000) continue
     try {
-      const model = client.getGenerativeModel({ model: modelName })
+      const model = client.getGenerativeModel({
+        model: modelName,
+        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+      })
       const result = await model.generateContent(prompt)
-      return { text: result.response.text(), model: modelName }
+      const value = { text: result.response.text(), model: modelName }
+      if (responseCache.size >= MAX_CACHE_ENTRIES) responseCache.delete(responseCache.keys().next().value)
+      responseCache.set(prompt, { createdAt: Date.now(), value })
+      return value
     } catch (error) {
       const message = error?.message?.toLowerCase() || ''
       if (!/quota|429|rate limit|resource exhausted|not found|unsupported/.test(message)) throw error
@@ -20,4 +42,263 @@ export async function askGemini(prompt) {
     }
   }
   return { text: null, model: 'Unavailable' }
+}
+
+function parseJson(text) {
+  const match = text?.match(/\{[\s\S]*\}/)
+  if (!match) throw Object.assign(new Error('The AI response was not valid JSON'), { status: 502 })
+  try { return JSON.parse(match[0]) } catch { throw Object.assign(new Error('The AI response was not valid JSON'), { status: 502 }) }
+}
+
+<<<<<<< HEAD
+function localForecast(history, forecastDates) {
+  const totals = history.reduce((result, day) => {
+    result.revenue += Math.max(0, Number(day?.revenue) || 0)
+    result.orders += Math.max(0, Number(day?.orders) || 0)
+    return result
+  }, { revenue: 0, orders: 0 })
+  const days = Math.max(history.length, 1)
+  const averageRevenue = Math.round(totals.revenue / days)
+  const averageOrders = Math.round(totals.orders / days)
+
+  return forecastDates.map(date => ({
+    date,
+    predictedRevenue: averageRevenue,
+    predictedOrders: averageOrders,
+    confidence: 'low',
+  }))
+}
+
+function localDecisionSupport(metrics, forecastData) {
+  const totalRevenue = Number(metrics?.totalRevenue) || 0
+  const totalExpenses = Number(metrics?.totalExpenses) || 0
+  const profit = Number(metrics?.profit) || 0
+  const totalOrders = Number(metrics?.totalOrders) || 0
+  const averageForecastRevenue = forecastData.length
+    ? Math.round(forecastData.reduce((sum, item) => sum + (Number(item?.predictedRevenue ?? item?.predicted) || 0), 0) / forecastData.length)
+    : 0
+  const averageForecastOrders = forecastData.length
+    ? Math.round(forecastData.reduce((sum, item) => sum + (Number(item?.predictedOrders) || 0), 0) / forecastData.length)
+    : 0
+  const lowStock = (metrics?.operationalSignals || []).find(signal => String(signal).toLowerCase().includes('low stock'))
+
+  return [
+    {
+      title: 'Financial snapshot',
+      description: `The selected scope has received ₱${totalRevenue.toLocaleString()} from ${totalOrders} orders, with ₱${totalExpenses.toLocaleString()} in recorded expenses and a net ${profit >= 0 ? 'profit' : 'loss'} of ₱${Math.abs(profit).toLocaleString()}.`,
+    },
+    {
+      title: 'Demand baseline',
+      description: averageForecastRevenue || averageForecastOrders
+        ? `With limited AI availability, the local baseline estimates about ${averageForecastOrders} orders and ₱${averageForecastRevenue.toLocaleString()} received per forecast period. Confirm this against new transactions before scheduling extra staff.`
+        : 'There is not enough recorded demand data for a reliable forecast yet. Continue recording completed orders and payments before changing staffing levels.',
+    },
+    {
+      title: 'Operational follow-up',
+      description: lowStock
+        ? `${lowStock} Review and restock this branch item before accepting additional loads that require it.`
+        : 'Review branch inventory and released-order workload before peak periods. The local recommendation is conservative until Gemini analysis becomes available.',
+    },
+  ]
+}
+
+function logGeminiFallback(feature, error) {
+  // Do not log request prompts, API keys, or customer data.
+  console.warn(`Gemini ${feature} unavailable; returning a local fallback.`, error?.message || 'No usable provider response')
+}
+
+export async function generateForecast({ history, forecastDates, branch, range }) {
+  if (!Array.isArray(forecastDates) || !forecastDates.length) {
+    throw Object.assign(new Error('Forecast dates are required'), { status: 400 })
+  }
+  history = Array.isArray(history) ? history : []
+
+  // A newly opened branch or a narrow date filter may legitimately contain no
+  // orders. It is not an API error: render a zero, low-confidence baseline.
+  if (!history.length) {
+    return {
+      predictions: localForecast(history, forecastDates),
+      insights: [{ title: 'Limited historical data', description: 'There are no recorded orders in this selected period, so the forecast is a zero-value local baseline until transactions are recorded.' }],
+      method: 'Local trend baseline · low confidence',
+      model: 'Local fallback',
+      isFallback: true,
+    }
+  }
+
+  let response
+  try {
+    response = await askGemini(`You are assisting a laundry business manager with a revenue-and-demand forecast.
+=======
+export async function generateForecast({ history, forecastDates, branch, range }) {
+  if (!Array.isArray(history) || !history.length || !Array.isArray(forecastDates) || !forecastDates.length) {
+    throw Object.assign(new Error('Historical order data is required for forecasting'), { status: 400 })
+  }
+
+  const response = await askGemini(`You are assisting a laundry business manager with a revenue-and-demand forecast.
+>>>>>>> 728e40e (Fixed)
+Use only the supplied historical daily totals. Do not invent events, customers, or operational facts.
+
+Branch scope: ${branch || 'All branches'}
+Report range: ${range}
+Currency: Philippine pesos (PHP / ₱). Every revenue amount is in PHP, never US dollars.
+Historical daily data: ${JSON.stringify(history)}
+Forecast dates: ${JSON.stringify(forecastDates)}
+
+Return ONLY valid JSON in exactly this shape:
+{"predictions":[{"date":"YYYY-MM-DD","predictedRevenue":0,"predictedOrders":0,"confidence":"low|medium|high"}],"insights":[{"title":"...","description":"..."}],"method":"short description"}
+
+Rules:
+- Include exactly one prediction for every forecast date given.
+- predictedRevenue and predictedOrders must be non-negative numbers.
+- predictedRevenue is a Philippine-peso (PHP) amount.
+- Make conservative forecasts when history is sparse.
+- Provide 2 or 3 practical recommendations covering peak demand, staffing, inventory, service demand, or branch performance when supported by the data.
+- Do not use markdown.`)
+<<<<<<< HEAD
+  } catch (error) {
+    logGeminiFallback('forecasting', error)
+  }
+
+  if (!response?.text) {
+    return {
+      predictions: localForecast(history, forecastDates),
+      insights: [{ title: 'Local trend baseline', description: 'Gemini is temporarily unavailable, so this forecast uses the average of the recorded daily data and should be treated as low confidence.' }],
+      method: 'Local trend baseline · low confidence',
+      model: 'Local fallback',
+      isFallback: true,
+    }
+  }
+
+  let parsed
+  try {
+    parsed = parseJson(response.text)
+  } catch (error) {
+    logGeminiFallback('forecast response parsing', error)
+    return {
+      predictions: localForecast(history, forecastDates),
+      insights: [{ title: 'Local trend baseline', description: 'Gemini returned an unusable response, so this forecast uses the average of the recorded daily data and should be treated as low confidence.' }],
+      method: 'Local trend baseline · low confidence',
+      model: 'Local fallback',
+      isFallback: true,
+    }
+  }
+  const byDate = new Map((parsed.predictions || []).map(item => [item.date, item]))
+  const isComplete = forecastDates.every(date => {
+    const item = byDate.get(date)
+    return item && Number.isFinite(Number(item.predictedRevenue)) && Number.isFinite(Number(item.predictedOrders))
+  })
+  if (!isComplete) {
+    logGeminiFallback('forecast response validation')
+    return {
+      predictions: localForecast(history, forecastDates),
+      insights: [{ title: 'Local trend baseline', description: 'Gemini returned an incomplete forecast, so the displayed values use the recorded daily average and should be treated as low confidence.' }],
+      method: 'Local trend baseline · low confidence',
+      model: 'Local fallback',
+      isFallback: true,
+    }
+  }
+  const predictions = forecastDates.map(date => {
+    const item = byDate.get(date)
+=======
+
+  if (!response.text) throw Object.assign(new Error('AI forecasting is currently unavailable'), { status: 503 })
+  const parsed = parseJson(response.text)
+  const byDate = new Map((parsed.predictions || []).map(item => [item.date, item]))
+  const predictions = forecastDates.map(date => {
+    const item = byDate.get(date)
+    if (!item || !Number.isFinite(Number(item.predictedRevenue)) || !Number.isFinite(Number(item.predictedOrders))) {
+      throw Object.assign(new Error('The AI forecast was incomplete'), { status: 502 })
+    }
+>>>>>>> 728e40e (Fixed)
+    return {
+      date,
+      predictedRevenue: Math.max(0, Math.round(Number(item.predictedRevenue))),
+      predictedOrders: Math.max(0, Math.round(Number(item.predictedOrders))),
+      confidence: ['low', 'medium', 'high'].includes(item.confidence) ? item.confidence : 'low',
+    }
+  })
+
+  return {
+    predictions,
+    insights: Array.isArray(parsed.insights) ? parsed.insights.slice(0, 3) : [],
+    // Do not render free-form model prose in the dashboard header.
+    method: `Gemini-assisted forecast (${response.model})`,
+    model: response.model,
+  }
+}
+
+export async function generateDecisionSupport({ metrics, trendData, forecastData, branch, range }) {
+  const safeMetrics = {
+    totalRevenue: Number(metrics?.totalRevenue) || 0,
+    totalExpenses: Number(metrics?.totalExpenses) || 0,
+    profit: Number(metrics?.profit) || 0,
+    totalOrders: Number(metrics?.totalOrders) || 0,
+    averageOrderValue: Number(metrics?.averageOrderValue) || 0,
+<<<<<<< HEAD
+    operationalSignals: Array.isArray(metrics?.operationalSignals) ? metrics.operationalSignals.slice(0, 12) : [],
+=======
+>>>>>>> 728e40e (Fixed)
+  }
+  const safeTrendData = Array.isArray(trendData) ? trendData.slice(-60) : []
+  const safeForecastData = Array.isArray(forecastData) ? forecastData.slice(0, 30) : []
+
+<<<<<<< HEAD
+  let response
+  try {
+    response = await askGemini(`You are an AI-assisted decision-support system for a multi-branch laundry business.
+=======
+  const response = await askGemini(`You are an AI-assisted decision-support system for a multi-branch laundry business.
+>>>>>>> 728e40e (Fixed)
+Analyze only the supplied metrics, trend data, and forecast. Do not invent facts.
+
+Branch scope: ${branch || 'All branches'}
+Report range: ${range}
+Currency: Philippine pesos (PHP / ₱). Every monetary metric and recommendation must use PHP, never US dollars.
+Metrics: ${JSON.stringify(safeMetrics)}
+Trend data: ${JSON.stringify(safeTrendData)}
+Forecast: ${JSON.stringify(safeForecastData)}
+
+Return ONLY valid JSON in this exact format:
+{"insights":[{"title":"short title","description":"one or two specific sentences"}]}
+
+Rules:
+- Return exactly 3 insights.
+<<<<<<< HEAD
+- Cover financial performance, service demand, and an operational recommendation for staffing, inventory, or branch productivity when the supplied signals support it.
+- State uncertainty when history is limited.
+- Avoid generic advice and markdown.`)
+  } catch (error) {
+    logGeminiFallback('decision support', error)
+  }
+
+  if (!response?.text) return { insights: localDecisionSupport(safeMetrics, safeForecastData), model: 'Local fallback', isFallback: true }
+
+  let parsed
+  try {
+    parsed = parseJson(response.text)
+  } catch (error) {
+    logGeminiFallback('decision-support response parsing', error)
+    return { insights: localDecisionSupport(safeMetrics, safeForecastData), model: 'Local fallback', isFallback: true }
+  }
+=======
+- Cover financial performance, forecast/service demand, and an operational recommendation for staffing, inventory, or branch productivity when data supports it.
+- State uncertainty when history is limited.
+- Avoid generic advice and markdown.`)
+
+  if (!response.text) throw Object.assign(new Error('AI decision support is currently unavailable'), { status: 503 })
+  const parsed = parseJson(response.text)
+>>>>>>> 728e40e (Fixed)
+  const insights = (parsed.insights || [])
+    .filter(item => typeof item?.title === 'string' && typeof item?.description === 'string')
+    .slice(0, 3)
+
+<<<<<<< HEAD
+  if (insights.length !== 3) {
+    logGeminiFallback('decision-support response validation')
+    return { insights: localDecisionSupport(safeMetrics, safeForecastData), model: 'Local fallback', isFallback: true }
+  }
+=======
+  if (insights.length !== 3) throw Object.assign(new Error('The AI decision-support response was incomplete'), { status: 502 })
+>>>>>>> 728e40e (Fixed)
+  return { insights, model: response.model }
 }

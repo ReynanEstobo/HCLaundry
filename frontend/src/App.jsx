@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
+import { AppErrorBoundary, PageLoader } from './components/AsyncState'
 
 // Page modules (and their data effects) are loaded only after their route opens.
 const LandingPage = lazy(() => import('./pages/LandingPage'))
@@ -16,10 +17,6 @@ const SMS = lazy(() => import('./pages/SMS'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Staff = lazy(() => import('./pages/Staff'))
 const StaffDashboard = lazy(() => import('./pages/StaffDashboard'))
-
-function PageLoader() {
-  return <div className="loading-spinner"><div className="spinner" /></div>
-}
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -73,6 +70,7 @@ function AppRoutes() {
 
 export default function App() {
   return (
+    <AppErrorBoundary>
     <AuthProvider>
       <Toaster
         position="top-right"
@@ -89,5 +87,6 @@ export default function App() {
       />
       <AppRoutes />
     </AuthProvider>
+    </AppErrorBoundary>
   )
 }

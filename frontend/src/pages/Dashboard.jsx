@@ -30,6 +30,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { askGemini } from "../services/geminiService";
+import { PageError, PageLoader } from "../components/AsyncState";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -42,6 +43,7 @@ export default function Dashboard() {
     lowStockItems: 0,
   });
   const [recentOrders, setRecentOrders] = useState([]);
+  const [loadError, setLoadError] = useState("");
   const [aiInsights, setAiInsights] = useState("");
   const [currentAIModel, setCurrentAIModel] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -148,8 +150,9 @@ export default function Dashboard() {
 
   async function loadDashboard(runAI = true) {
     if (isInitialLoad) setLoading(true);
-    setLoading(false);
+    setLoadError("");
     setIsInitialLoad(false);
+    try {
     const today = startOfToday().toISOString();
 
     const [
@@ -183,6 +186,9 @@ export default function Dashboard() {
       .from("settings")
       .select("*")
       .single();
+
+    const requestError = ordersRes.error || customersRes.error || inventoryRes.error || recentRes.error || usageRes.error || categoriesRes.error;
+    if (requestError) throw requestError;
 
     setSettings(settingsData || {});
 
@@ -293,7 +299,11 @@ Do NOT add extra text.
     }
 
     setWeeklyData(buildChartData(orders, range));
-    setLoading(false);
+    } catch (error) {
+      setLoadError(error.message || "Unable to load dashboard data.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function generateForecasts(orders, inventory, usageLogs) {
@@ -592,12 +602,8 @@ Do NOT add extra text.
     return `${minutes}m ${seconds}s`;
   }
 
-  if (loading)
-    return (
-      <div className="loading-spinner">
-        <div className="spinner" />
-      </div>
-    );
+  if (loading) return <PageLoader label="Loading dashboard…" />;
+  if (loadError) return <PageError message={loadError} onRetry={() => loadDashboard(false)} />;
 
   return (
     <>

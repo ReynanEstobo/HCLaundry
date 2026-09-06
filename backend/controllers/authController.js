@@ -2,8 +2,8 @@ import { authClient } from '../config/supabase.js'
 import { getStaffProfile } from '../models/databaseModel.js'
 
 async function identityFor(user) {
-  const { data: staff } = await getStaffProfile(user.id)
-  return { user, role: staff?.role || 'admin', staffName: staff?.full_name || null, branch: staff?.branch || null }
+  const { data: staff } = await getStaffProfile(user.id, user.email)
+  return { user, role: String(staff?.role || 'unassigned').toLowerCase(), staffName: staff?.full_name || null, branch: staff?.branch || null }
 }
 
 export async function login({ email, password }) {

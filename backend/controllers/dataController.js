@@ -14,10 +14,11 @@ function validate(table, { operation, payload = {} }) {
   }
 }
 
-export async function handleData(table, body) {
+export async function handleData(table, body, identity) {
   validate(table, body)
-  const result = await execute(table, body)
+  const result = await execute(table, body, identity)
   if (result.error) throw Object.assign(new Error(result.error.message), { status: 400, details: result.error })
-  if (body.operation !== 'select') events.emit('change', { table, new: body.payload || null })
+  // Do not broadcast changed record data to other browser sessions.
+  if (body.operation !== 'select') events.emit('change', { table })
   return result
 }

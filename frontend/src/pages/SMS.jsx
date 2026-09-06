@@ -3,10 +3,12 @@ import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
+import { PageError, PageLoader } from "../components/AsyncState";
 
 export default function Notifications() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [sending, setSending] = useState(false);
   const [tab, setTab] = useState("email");
   const [emailSending, setEmailSending] = useState({});
@@ -22,8 +24,9 @@ export default function Notifications() {
   // ─────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
-
-    const { data: ordersData } = await supabase
+    setLoadError("");
+    try {
+    const { data: ordersData, error } = await supabase
       .from("orders")
       .select(
         `
@@ -39,9 +42,13 @@ export default function Notifications() {
         ascending: false,
       });
 
+    if (error) throw error;
     setOrders(ordersData || []);
-
-    setLoading(false);
+    } catch (error) {
+      setLoadError(error.message || "Unable to load notification data.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -150,13 +157,8 @@ Thank you for choosing I&C Laundry Hub!
   // ─────────────────────────────────────
   // LOADING
   // ─────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="loading-spinner">
-        <div className="spinner" />
-      </div>
-    );
-  }
+  if (loading) return <PageLoader label="Loading notifications…" />;
+  if (loadError) return <PageError message={loadError} onRetry={loadData} />;
 
   return (
     <>

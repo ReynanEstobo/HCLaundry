@@ -9,22 +9,25 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [role, setRole] = useState(null)
   const [staffName, setStaffName] = useState(null)
+  const [branch, setBranch] = useState(null)
   const [loading, setLoading] = useState(true)
 
   async function fetchStaffRole(authUser) {
-    if (!authUser) { setRole(null); setStaffName(null); return }
+    if (!authUser) { setRole(null); setStaffName(null); setBranch(null); return }
     const { data } = await supabase
       .from('staff')
-      .select('role, full_name')
+      .select('role, full_name, branch')
       .eq('auth_id', authUser.id)
       .maybeSingle()
     if (data) {
-      setRole(data.role)
+      setRole(String(data.role || 'unassigned').toLowerCase())
       setStaffName(data.full_name)
+      setBranch(data.branch || null)
     } else {
       // No staff record — treat as admin (for seed user / owner)
-      setRole('admin')
+      setRole('unassigned')
       setStaffName(null)
+      setBranch(null)
     }
   }
 
@@ -54,7 +57,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, role, staffName, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, role, staffName, branch, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )

@@ -15,6 +15,8 @@ import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
+import { restockBranchInventory } from "../services/api/operationsApi";
+import { PageError, PageLoader } from "../components/AsyncState";
 
 const BRANCHES = [
   "Main - Brgy 7",
@@ -27,6 +29,7 @@ export default function Inventory() {
   const [categories, setCategories] = useState([]);
   const [usageLogs, setUsageLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [showRestock, setShowRestock] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -51,22 +54,23 @@ export default function Inventory() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [itemsRes, catRes, usageRes] = await Promise.all([
-      supabase
-        .from("inventory_items")
-        .select("*, inventory_categories(name)")
-        .order("name"),
-      supabase.from("inventory_categories").select("*").order("name"),
-      supabase
-        .from("inventory_usage_log")
-        .select("*")
-        .order("logged_at", { ascending: false })
-        .limit(500),
-    ]);
-    setItems(itemsRes.data || []);
-    setCategories(catRes.data || []);
-    setUsageLogs(usageRes.data || []);
-    setLoading(false);
+    setLoadError("");
+    try {
+      const [itemsRes, catRes, usageRes] = await Promise.all([
+        supabase.from("inventory_items").select("*, inventory_categories(name)").order("name"),
+        supabase.from("inventory_categories").select("*").order("name"),
+        supabase.from("inventory_usage_log").select("*").order("logged_at", { ascending: false }).limit(500),
+      ]);
+      const error = itemsRes.error || catRes.error || usageRes.error;
+      if (error) throw error;
+      setItems(itemsRes.data || []);
+      setCategories(catRes.data || []);
+      setUsageLogs(usageRes.data || []);
+    } catch (error) {
+      setLoadError(error.message || "Unable to load inventory data.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -186,6 +190,7 @@ export default function Inventory() {
           description: `New item: ${form.name} (${stock} ${form.unit} × ₱${costPerUnit})`,
           amount: stock * costPerUnit,
           expense_date: format(new Date(), "yyyy-MM-dd"),
+          ...(role === "admin" ? { branch: form.branch } : {}),
         });
       }
     }
@@ -200,31 +205,15 @@ export default function Inventory() {
     const qty = parseFloat(restockQty);
     if (!qty || qty <= 0) return toast.error("Enter a valid quantity");
 
-    const newStock = Number(showRestock.current_stock) + qty;
-    const [updateRes, insertRes] = await Promise.all([
-      supabase
-        .from("inventory_items")
-        .update({ current_stock: newStock })
-        .eq("id", showRestock.id),
-      supabase.from("inventory_restocks").insert({
-        item_id: showRestock.id,
-        quantity_added: qty,
-        cost_total: parseFloat(restockCost) || null,
+    try {
+      await restockBranchInventory({
+        itemId: showRestock.id,
+        quantity: qty,
+        costTotal: parseFloat(restockCost) || null,
         supplier: restockSupplier || null,
-      }),
-    ]);
-
-    if (updateRes.error) return toast.error(updateRes.error.message);
-
-    // Auto-create expense record for restock cost
-    const cost = parseFloat(restockCost);
-    if (cost > 0) {
-      await supabase.from("expenses").insert({
-        category: "inventory",
-        description: `Restock: ${showRestock.name} (${qty} ${showRestock.unit})`,
-        amount: cost,
-        expense_date: format(new Date(), "yyyy-MM-dd"),
       });
+    } catch (error) {
+      return toast.error(error.message);
     }
 
     toast.success("Stock restocked!");
@@ -260,12 +249,8 @@ export default function Inventory() {
     return matchesSearch && matchesBranch;
   });
 
-  if (loading)
-    return (
-      <div className="loading-spinner">
-        <div className="spinner" />
-      </div>
-    );
+  if (loading) return <PageLoader label="Loading inventory…" />;
+  if (loadError) return <PageError message={loadError} onRetry={loadData} />;
 
   return (
     <>
@@ -331,8 +316,7 @@ export default function Inventory() {
             <thead>
               <tr>
                 <th>Item</th>
-                <th>Category</th>
-                <th>Branch</th>
+                {role === "admin" && <th>Branch</th>}
                 <th>Stock</th>
                 <th>Min Level</th>
                 <th>Status</th>
@@ -344,7 +328,7 @@ export default function Inventory() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="empty-state">
+                  <td colSpan={role === "admin" ? 8 : 7} className="empty-state">
                     <p>No items found</p>
                   </td>
                 </tr>
@@ -389,13 +373,13 @@ export default function Inventory() {
                           {item.name}
                         </div>
                       </td>
-                      <td>{item.inventory_categories?.name || "—"}</td>
-
+                      {role === "admin" && (
                       <td>
                         <span className="badge badge-ok">
                           {item.branch || "—"}
                         </span>
                       </td>
+                      )}
 
                       <td>
                         <div>

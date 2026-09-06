@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
+import { PageError, PageLoader } from "../components/AsyncState";
 
 // ─────────────────────────────────────
 // ROLES
@@ -50,6 +51,7 @@ export default function Staff() {
   const [staffList, setStaffList] = useState([]);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const [showModal, setShowModal] = useState(false);
 
@@ -76,17 +78,16 @@ export default function Staff() {
   // ─────────────────────────────────────
   const loadStaff = useCallback(async () => {
     setLoading(true);
-
-    const { data } = await supabase
-      .from("staff")
-      .select("*")
-      .order("created_at", {
-        ascending: false,
-      });
-
-    setStaffList(data || []);
-
-    setLoading(false);
+    setLoadError("");
+    try {
+      const { data, error } = await supabase.from("staff").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      setStaffList(data || []);
+    } catch (error) {
+      setLoadError(error.message || "Unable to load staff records.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -309,13 +310,8 @@ export default function Staff() {
   // ─────────────────────────────────────
   // LOADING
   // ─────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="loading-spinner">
-        <div className="spinner" />
-      </div>
-    );
-  }
+  if (loading) return <PageLoader label="Loading staff…" />;
+  if (loadError) return <PageError message={loadError} onRetry={loadStaff} />;
 
   return (
     <>
