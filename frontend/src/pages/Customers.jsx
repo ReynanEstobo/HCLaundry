@@ -41,9 +41,11 @@ export default function Customers() {
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  const loadCustomers = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
+  const loadCustomers = useCallback(async (background = false) => {
+    if (!background) {
+      setLoading(true);
+      setLoadError("");
+    }
 
     try {
       // Admin receives the master client directory. Staff receive only clients
@@ -54,13 +56,17 @@ export default function Customers() {
       setAllCustomers(sorted);
       setTotalCount(sorted.length);
     } catch (error) {
-      setLoadError(error.message || "Unable to load client records.");
-      setCustomers([]);
-      setAllCustomers([]);
-      setTotalCount(0);
+      if (!background) {
+        setLoadError(error.message || "Unable to load client records.");
+        setCustomers([]);
+        setAllCustomers([]);
+        setTotalCount(0);
+      } else {
+        console.error("Background customer refresh failed:", error);
+      }
     }
 
-    setLoading(false);
+    if (!background) setLoading(false);
   }, [page]);
 
   // 🔥 RESET PAGE WHEN SEARCH CHANGES
@@ -70,7 +76,7 @@ export default function Customers() {
   }, [loadCustomers]);
 
   // Realtime: refresh when customers change
-  useRealtime(["customers"], loadCustomers);
+  useRealtime(["customers"], () => loadCustomers(true));
 
   function openNew() {
     setEditing(null);
@@ -122,7 +128,7 @@ export default function Customers() {
     if (error) return toast.error(error.message);
     toast.success(editing ? "Customer updated!" : "Customer added!");
     setShowModal(false);
-    loadCustomers();
+    loadCustomers(true);
   }
 
   async function deleteCustomer() {
@@ -133,7 +139,7 @@ export default function Customers() {
       if (error) throw error;
       toast.success("Customer moved to Recycle Bin");
       setCustomerToDelete(null);
-      loadCustomers();
+      loadCustomers(true);
     } catch (error) {
       toast.error(error.message);
     } finally {

@@ -80,16 +80,6 @@ export default function Dashboard() {
     loadDashboard(true); // ✅ run AI only once
   }, []);
 
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTick((t) => t + 1);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
   // Realtime: refresh dashboard when orders or inventory change
   const loadDashboardCb = useCallback(() => loadDashboard(false), []);
   useRealtime(["orders", "customers", "inventory_items"], loadDashboardCb);
@@ -567,29 +557,11 @@ export default function Dashboard() {
     return `badge badge-${status}`;
   }
 
-  function getTimeRemaining(order, settings) {
-    if (!order.stage_started_at) return "Waiting start";
-
-    const stageStart = new Date(order.stage_started_at).getTime();
-    const now = Date.now();
-
-    const durations = {
-      washing: (Number(settings.etawash) || 45) * 60000,
-      drying: (Number(settings.etadrying) || 40) * 60000,
-      folding: (Number(settings.etafolding) || 15) * 60000,
-    };
-
-    const duration = durations[order.status];
-    if (!duration) return "";
-
-    const remaining = stageStart + duration - now;
-
-    if (remaining <= 0) return "Advancing...";
-
-    const minutes = Math.floor(remaining / 60000);
-    const seconds = Math.floor((remaining % 60000) / 1000);
-
-    return `${minutes}m ${seconds}s`;
+  function getEstimatedReady(order) {
+    if (!order.estimated_ready_at) return "ETA unavailable";
+    return new Date(order.estimated_ready_at).toLocaleString("en-PH", {
+      month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+    });
   }
 
   if (loading) return <PageLoader label="Loading dashboard…" />;
@@ -1108,7 +1080,7 @@ export default function Dashboard() {
                 <th>Customer</th>
 
                 <th>Status</th>
-                <th>Time Left</th>
+                <th>Estimated Ready</th>
                 <th>Amount</th>
               </tr>
             </thead>
@@ -1153,7 +1125,7 @@ export default function Dashboard() {
                           }}
                         >
                           <span>
-                            {getTimeRemaining(order, settings)} {tick && ""}
+                            {getEstimatedReady(order)}
                           </span>
                         </span>
                       )}

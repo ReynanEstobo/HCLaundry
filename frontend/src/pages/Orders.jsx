@@ -9,8 +9,8 @@ import {
   Loader2,
   Mail,
   Minus,
-  Play,
   Plus,
+  RotateCcw,
   Search,
   TriangleAlert,
   User,
@@ -21,72 +21,49 @@ import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { sendEmail, sendSms } from "../services/api/notificationApi";
-import { cancelBranchOrder, createBranchOrder, getVisibleCustomers, lookupCustomerByPhone } from "../services/api/operationsApi";
+import { cancelBranchOrder, createBranchOrder, getVisibleCustomers, lookupCustomerByPhone, transitionBranchOrder } from "../services/api/operationsApi";
 import { useAuth } from "../context/AuthContext";
 import { PageError, PageLoader } from "../components/AsyncState";
 import { compareOrdersForList } from "../utils/orderListPriority";
 
-const STATUS_FLOW = [
-  "pending",
-  "washing",
-  "drying",
-  "folding",
+const PROCESS_FLOW = [
+  "received",
+  "on_process",
   "ready",
-  "released",
 ];
-const STATUS_FILTERS = ["all", ...STATUS_FLOW, "cancelled"];
+const STATUS_FILTERS = ["all", ...PROCESS_FLOW, "released", "cancelled"];
 const STATUS_LABELS = {
-  pending: "Pending",
-  washing: "Washing",
-  drying: "Drying",
-  folding: "Folding",
+  received: "Received",
+  on_process: "On Process",
   ready: "Ready for pick-up",
   released: "Released",
   cancelled: "Cancelled",
 };
 const STATUS_ICONS = {
-  pending: "\u23F3",
-  washing: "\uD83E\uDDFA",
-  drying: "\u2600\uFE0F",
-  folding: "\uD83D\uDC55",
+  received: "\uD83D\uDCE5",
+  on_process: "\u2699\uFE0F",
   ready: "\u2705",
   released: "\uD83D\uDCE6",
   cancelled: "\u274C",
 };
 
-// Stages with timers
-const TIMED_STAGES = ["washing", "drying", "folding"];
-// Stages where timer auto-starts when order enters
-const AUTO_TIMER_STAGES = ["washing", "drying"];
-const MACHINE_CAPACITY_DEFAULTS = {
-  washing: 2,
-  drying: 3,
-  folding: 4,
-};
 const BRANCHES = [
   "Main - Brgy 7",
   "2nd Branch - Brgy Calzada",
   "3rd Branch - Nasugbu",
 ];
 
-function getStageDurations(settings) {
-  return {
-    washing: (Number(settings.etawash) || 45) * 60000,
-    drying: (Number(settings.etadrying) || 40) * 60000,
-    folding: (Number(settings.etafolding) || 15) * 60000,
-  };
+function formatOrderEta(order) {
+  if (!order?.estimated_ready_at) return "ETA unavailable";
+  return new Date(order.estimated_ready_at).toLocaleString("en-PH", {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  });
 }
 
-function calculateDynamicETA(order, settings) {
-  if (!order.created_at) return null;
-
-  const totalMinutes =
-    (Number(settings.etawash) || 45) +
-    (Number(settings.etadrying) || 40) +
-    (Number(settings.etafolding) || 15);
-
-  const baseTime = new Date(order.created_at);
-  return new Date(baseTime.getTime() + totalMinutes * 60000);
+function isOrderOverdue(order) {
+  return ["received", "on_process"].includes(order?.status)
+    && Boolean(order?.estimated_ready_at)
+    && new Date(order.estimated_ready_at).getTime() < Date.now();
 }
 
 async function sendReadyEmail(order, customerName, customerEmail) {
@@ -95,7 +72,7 @@ async function sendReadyEmail(order, customerName, customerEmail) {
     const res = await sendEmail({
         to: customerEmail,
         subject: `Your Laundry is Ready for Pickup! (Tracking #: ${order.order_number})`,
-        body: `Hi ${customerName || "Customer"},\n\nGreat news! Your laundry is now ready for pickup at 4J Laundry.\n\nTracking Number: ${order.order_number}\n\nPlease pick it up at your earliest convenience during our business hours.\n\nThank you for choosing 4J Laundry!\n\n-- 4J Laundry Team`,
+        body: `Hi ${customerName || "Customer"},\n\nGreat news! Your laundry is now ready for pickup at H&C Laundry.\n\nTracking Number: ${order.order_number}\n\nPlease pick it up at your earliest convenience during our business hours.\n\nThank you for choosing H&C Laundry!\n\n-- H&C Laundry Team`,
     });
     if (res.success) {
       toast.success(`Email notification sent to ${customerEmail}`);
@@ -112,22 +89,15 @@ async function sendOrderSMS(
   serviceName,
   weightKg,
   totalPrice,
-  settings,
+  estimatedReadyAt,
 ) {
   if (!phone) return;
   try {
-    const etaMinutes =
-      (Number(settings.etawash) || 45) +
-      (Number(settings.etadrying) || 40) +
-      (Number(settings.etafolding) || 15);
-    const etaHours = Math.floor(etaMinutes / 60);
-    const etaRemainMins = etaMinutes % 60;
-    const etaText =
-      etaHours > 0
-        ? `${etaHours}hr${etaRemainMins > 0 ? ` ${etaRemainMins}min` : ""}`
-        : `${etaMinutes}min`;
+    const etaText = estimatedReadyAt
+      ? new Date(estimatedReadyAt).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+      : "to be confirmed";
 
-    const message = `Hi ${customerName || "Customer"}! Your laundry order has been received.\n\nTracking #: ${orderNumber}\nService: ${serviceName}\nWeight: ${weightKg}kg\nTotal: P${totalPrice.toLocaleString()}\nETA: ~${etaText}\n\nTrack your order at our website using your tracking number.\n\nWe'll notify you when it's ready. Thank you! - 4J Laundry`;
+    const message = `Hi ${customerName || "Customer"}! Your laundry order has been received.\n\nTracking #: ${orderNumber}\nService: ${serviceName}\nWeight: ${weightKg}kg\nTotal: P${totalPrice.toLocaleString()}\nEstimated ready for pickup: ${etaText}\n\nTrack your order at our website using your tracking number.\n\nWe'll notify you when it's ready. Thank you! - H&C Laundry`;
 
     await sendSms({ phone, message });
   } catch {
@@ -138,7 +108,7 @@ async function sendOrderSMS(
 async function sendReadySMS(phone, orderNumber, customerName) {
   if (!phone) return;
   try {
-    const message = `Hi ${customerName || "Customer"}! Your laundry (Tracking #: ${orderNumber}) is now READY for pickup. Please visit 4J Laundry at your earliest convenience. Thank you!`;
+    const message = `Hi ${customerName || "Customer"}! Your laundry (Tracking #: ${orderNumber}) is now READY for pickup. Please visit H&C Laundry at your earliest convenience. Thank you!`;
 
     await sendSms({ phone, message });
   } catch {
@@ -153,34 +123,18 @@ async function sendOrderReceivedEmail(
   serviceName,
   weightKg,
   totalPrice,
-  settings,
+  estimatedReadyAt,
 ) {
   if (!customerEmail) return;
   try {
-    // Calculate total ETA from all stage durations
-    const etaMinutes =
-      (Number(settings.etawash) || 45) +
-      (Number(settings.etadrying) || 40) +
-      (Number(settings.etafolding) || 15);
-    const etaHours = Math.floor(etaMinutes / 60);
-    const etaRemainMins = etaMinutes % 60;
-    const etaText =
-      etaHours > 0
-        ? `${etaHours} hour${etaHours > 1 ? "s" : ""}${etaRemainMins > 0 ? ` ${etaRemainMins} minutes` : ""}`
-        : `${etaMinutes} minutes`;
-
-    const now = new Date();
-    const completionTime = new Date(now.getTime() + etaMinutes * 60000);
-    const timeOptions = { hour: "numeric", minute: "2-digit", hour12: true };
-    const completionText = completionTime.toLocaleTimeString(
-      "en-US",
-      timeOptions,
-    );
+    const completionText = estimatedReadyAt
+      ? new Date(estimatedReadyAt).toLocaleString("en-PH", { month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })
+      : "to be confirmed";
 
     const res = await sendEmail({
         to: customerEmail,
         subject: `Order Received! (Tracking #: ${orderNumber})`,
-        body: `Hi ${customerName || "Customer"},\n\nThank you for choosing 4J Laundry! Your garment has been received and is now being processed.\n\nOrder Details:\n- Tracking Number: ${orderNumber}\n- Service: ${serviceName}\n- Weight: ${weightKg} kg\n- Total: P${totalPrice.toLocaleString()}\n\nEstimated Completion Time: ${etaText} (approximately ${completionText})\n\nYou can track your order anytime on our website using your tracking number.\n\nWe'll notify you via email once your laundry is ready for pickup.\n\nThank you!\n\n-- 4J Laundry Team`,
+        body: `Hi ${customerName || "Customer"},\n\nThank you for choosing H&C Laundry! Your garment has been received.\n\nOrder Details:\n- Tracking Number: ${orderNumber}\n- Service: ${serviceName}\n- Weight: ${weightKg} kg\n- Total: P${totalPrice.toLocaleString()}\n\nEstimated ready-for-pickup time: ${completionText}\n\nYou can track your order anytime on our website using your tracking number. We'll notify you once it is ready for pickup.\n\nThank you!\n\n-- H&C Laundry Team`,
     });
     if (res.success) {
       toast.success(`Order confirmation email sent to ${customerEmail}`);
@@ -219,25 +173,25 @@ export default function Orders() {
   const [searchInput, setSearchInput] = useState("");
   const [settings, setSettings] = useState({});
   const [viewMode, setViewMode] = useState("table");
-  const [now, setNow] = useState(Date.now());
+  const [dragOrder, setDragOrder] = useState(null);
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
+  const [correctionOrder, setCorrectionOrder] = useState(null);
+  const [correctionTarget, setCorrectionTarget] = useState("");
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [tableLoading, setTableLoading] = useState(false);
+  const hasLoadedOrders = useRef(false);
+  const paginationRefresh = useRef(false);
 
   useEffect(() => {
     if (settings?.defaultview) {
       setViewMode(settings.defaultview);
     }
   }, [settings]);
-  const [dragOrder, setDragOrder] = useState(null);
 
   const mappedSettings = {
-    etaWash: settings.etawash,
-    etaDrying: settings.etadrying,
-    etaFolding: settings.etafolding,
     bundleKg: settings.bundlekg,
     bundlePrice: settings.bundleprice,
     addonPrice: settings.addonprice,
-    capacityWash: settings.capacitywash,
-    capacityDrying: settings.capacitydrying,
-    capacityFolding: settings.capacityfolding,
   };
   const BUNDLE_KG = Number(mappedSettings.bundleKg) || 8;
   const BUNDLE_PRICE = Number(mappedSettings.bundlePrice) || 200;
@@ -266,24 +220,6 @@ export default function Orders() {
     : soapItems;
 
   const [phoneMatch, setPhoneMatch] = useState(null); // null = not searched, object = found, false = not found
-
-  function getStageCapacity(stage) {
-    const keyMap = {
-      washing: "capacityWash",
-      drying: "capacityDrying",
-      folding: "capacityFolding",
-    };
-    const configured = Number(settings[keyMap[stage]]);
-    if (Number.isFinite(configured) && configured > 0) return configured;
-    return MACHINE_CAPACITY_DEFAULTS[stage] || Infinity;
-  }
-
-  function getStageLoad(stage, currentOrders = orders) {
-    if (!TIMED_STAGES.includes(stage)) return 0;
-    return currentOrders.filter(
-      (order) => order.status === stage && !order.stage_started_at,
-    ).length;
-  }
 
   function calcPrice(weight, addons) {
     if (!weight || weight <= 0) return 0;
@@ -320,11 +256,15 @@ export default function Orders() {
     });
   }
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
+  const loadData = useCallback(async (background = false, tableOnly = false) => {
+    if (!background) {
+      setLoading(true);
+      setLoadError("");
+    }
 
     // 👇 ADD THIS BLOCK
+    if (tableOnly) setTableLoading(true);
+
     let ordersQuery = supabase
       .from("orders")
       .select("*, customers(name, phone, email)", { count: "exact" });
@@ -333,9 +273,10 @@ export default function Orders() {
       ordersQuery = ordersQuery.eq("status", filter);
     }
 
-    ordersQuery = ordersQuery
-      .order("priority_order", { ascending: true })
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    // Fetch the filtered queue before slicing it. Sorting only a database page
+    // caused older records to fill page one and pushed today's new order behind
+    // released/cancelled entries.
+    ordersQuery = ordersQuery.order("created_at", { ascending: false });
 
     // 👇 KEEP THIS (but replace first item)
     try {
@@ -353,27 +294,34 @@ export default function Orders() {
     const { data: allData } = await supabase
       .from("orders")
       .select("*, customers(name, phone, email)")
-      .order("priority_order", { ascending: true });
+      .order("created_at", { ascending: false });
 
     const error = ordersRes.error || custRes.error || soapRes.error || servicesRes.error;
     if (error) throw error;
 
-    setAllOrders(allData || []);
-
-    setOrders(ordersRes.data || []);
-    setTotalCount(ordersRes.count || 0);
+    const sortedVisible = [...(ordersRes.data || [])].sort(compareOrdersForList);
+    const sortedAll = [...(allData || [])].sort(compareOrdersForList);
+    setAllOrders(sortedAll);
+    setOrders(sortedVisible.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE));
+    setTotalCount(sortedVisible.length);
     setCustomers(custRes.data || []);
     setSoapItems(soapRes.data || []);
     setServiceTypes(servicesRes.data || []);
     } catch (error) {
-      setLoadError(error.message || "Unable to load order data.");
+      if (!background) setLoadError(error.message || "Unable to load order data.");
+      else console.error("Background order refresh failed:", error);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
+      if (tableOnly) setTableLoading(false);
     }
   }, [page, filter]); // ✅ ADD THIS
 
   useEffect(() => {
-    loadData();
+    const isInitialLoad = !hasLoadedOrders.current;
+    const isPaginationRefresh = paginationRefresh.current;
+    hasLoadedOrders.current = true;
+    paginationRefresh.current = false;
+    loadData(!isInitialLoad, isPaginationRefresh);
   }, [loadData]); // ✅ FIXED // ✅ ADD page
 
   useEffect(() => {
@@ -381,14 +329,7 @@ export default function Orders() {
   }, [filter]);
 
   // Realtime: refresh when orders, customers, or inventory change
-  useRealtime(["orders", "customers", "inventory_items"], loadData);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now()); // 🔥 updates UI every second
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
+  useRealtime(["orders", "customers", "inventory_items"], () => loadData(true));
   useEffect(() => {
     async function loadSettings() {
       const { data, error } = await supabase
@@ -410,100 +351,11 @@ export default function Orders() {
     if (data) setSettings(data);
   });
 
-  // Auto-advance orders whose timers were manually started and expired
-  const autoAdvanceRef = useRef(false);
-  useEffect(() => {
-    const stageDurations = getStageDurations(settings);
-
-    async function checkAndAdvance() {
-      if (autoAdvanceRef.current) return;
-      autoAdvanceRef.current = true;
-
-      try {
-        const { data: activeOrders, error: fetchErr } = await supabase
-          .from("orders")
-          .select("*, customers(name, phone, email)")
-          .in("status", TIMED_STAGES);
-
-        if (fetchErr) {
-          autoAdvanceRef.current = false;
-          return;
-        }
-
-        if (!activeOrders || activeOrders.length === 0) {
-          autoAdvanceRef.current = false;
-          return;
-        }
-
-        const now = Date.now();
-        let advanced = false;
-
-        for (const order of activeOrders) {
-          // Only advance if timer was started (auto or manual)
-          if (!order.stage_started_at) continue;
-
-          const stageStart = new Date(order.stage_started_at).getTime();
-          const duration = stageDurations[order.status];
-          if (!duration) continue;
-
-          const elapsed = now - stageStart;
-          if (elapsed >= duration) {
-            const idx = STATUS_FLOW.indexOf(order.status);
-            if (idx < 0 || idx >= STATUS_FLOW.length - 1) continue;
-            const nextStatus = STATUS_FLOW[idx + 1];
-
-            const updates = {
-              status: nextStatus,
-              stage_started_at: AUTO_TIMER_STAGES.includes(nextStatus)
-                ? new Date().toISOString()
-                : null,
-            };
-            if (nextStatus === "ready")
-              updates.actual_completion = new Date().toISOString();
-
-            const { error: updateErr } = await supabase
-              .from("orders")
-              .update(updates)
-              .eq("id", order.id);
-            if (updateErr) continue;
-
-            advanced = true;
-
-            // Auto-start timer if next stage is an auto-timer stage (wash/dry)
-            if (AUTO_TIMER_STAGES.includes(nextStatus)) {
-            }
-
-            if (nextStatus === "ready" && order.customers?.email) {
-              sendReadyEmail(
-                order,
-                order.customers.name,
-                order.customers.email,
-              );
-            }
-            if (nextStatus === "ready" && order.customers?.phone) {
-              sendReadySMS(
-                order.customers.phone,
-                order.order_number,
-                order.customers.name,
-              );
-            }
-            toast.success(
-              `${order.order_number}: ${STATUS_LABELS[order.status]} \u2192 ${STATUS_LABELS[nextStatus]}`,
-            );
-          }
-        }
-
-        if (advanced) loadData();
-      } catch (err) {
-        console.error("Auto-advance exception:", err);
-      }
-      autoAdvanceRef.current = false;
-    }
-
-    checkAndAdvance();
-    const interval = setInterval(checkAndAdvance, 3000);
-    return () => clearInterval(interval);
-  }, [settings, loadData]);
+  function goToPage(nextPage) {
+    if (nextPage === page || nextPage < 0 || nextPage >= totalPages) return;
+    paginationRefresh.current = true;
+    setPage(nextPage);
+  }
 
   function openNew() {
     setEditing(null);
@@ -636,11 +488,6 @@ export default function Orders() {
           ? "paid"
           : "partial";
 
-    const totalEtaMinutes =
-      (Number(settings.etawash) || 45) +
-      (Number(settings.etadrying) || 40) +
-      (Number(settings.etafolding) || 15);
-
     const payload = {
       customer_id: form.customer_id || null,
       service_type_id: form.service_type_id || null,
@@ -653,7 +500,7 @@ export default function Orders() {
       amount_paid: amountPaid,
       ...(isAdmin && { branch: form.branch }),
 
-      ...(!editing && { status: "pending" }),
+      ...(!editing && { status: "received" }),
     };
 
     let error, orderData;
@@ -774,7 +621,7 @@ export default function Orders() {
         "Laundry Service",
         weight,
         total_price,
-        settings,
+        orderData.estimated_ready_at,
       );
     }
 
@@ -787,13 +634,13 @@ export default function Orders() {
         "Laundry Service",
         weight,
         total_price,
-        settings,
+        orderData.estimated_ready_at,
       );
     }
 
     toast.success(editing ? "Order updated!" : "Order created!");
     setShowModal(false);
-    loadData();
+    loadData(true);
   }
 
   async function completePaymentAndRelease() {
@@ -820,27 +667,35 @@ export default function Orders() {
       return toast.error("Full payment required before release");
     }
 
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        amount_paid: newTotalPaid,
-        payment_status: "paid",
-        payment_method: paymentMethod,
-        status: "released",
-        picked_up_at: new Date().toISOString(),
-      })
-      .eq("id", selectedOrder.id);
+    setUpdatingOrderId(selectedOrder.id);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          amount_paid: newTotalPaid,
+          payment_status: "paid",
+          payment_method: paymentMethod,
+        })
+        .eq("id", selectedOrder.id);
 
-    if (error) return toast.error(error.message);
+      if (error) throw error;
+      await transitionBranchOrder(selectedOrder.id, "released");
+    } catch (transitionError) {
+      toast.error(transitionError.message || "Unable to release the order");
+      setUpdatingOrderId(null);
+      return;
+    }
 
     toast.success("Order released successfully");
 
     setShowPaymentModal(false);
     setSelectedOrder(null);
-    loadData();
+    await loadData(true);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    setUpdatingOrderId(null);
   }
 
-  async function updateStatus(order, newStatus) {
+  async function updateStatus(order, newStatus, correctionNote = "") {
     if (newStatus === "released") {
       const total = Number(order.total_price) || 0;
 
@@ -864,28 +719,22 @@ export default function Orders() {
       }
     }
 
-    const updates = {
-      status: newStatus,
-      stage_started_at: AUTO_TIMER_STAGES.includes(newStatus)
-        ? new Date().toISOString()
-        : null,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (newStatus === "ready") {
-      updates.actual_completion = new Date().toISOString();
+    setUpdatingOrderId(order.id);
+    try {
+      if (PROCESS_FLOW.includes(newStatus) || newStatus === "released") {
+        await transitionBranchOrder(order.id, newStatus, correctionNote);
+      } else {
+        const { error } = await supabase
+          .from("orders")
+          .update({ status: newStatus, picked_up_at: newStatus === "released" ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
+          .eq("id", order.id);
+        if (error) throw error;
+      }
+    } catch (error) {
+      toast.error(error.message || "Unable to update the order stage");
+      setUpdatingOrderId(null);
+      return false;
     }
-
-    if (newStatus === "released") {
-      updates.picked_up_at = new Date().toISOString();
-    }
-
-    const { error } = await supabase
-      .from("orders")
-      .update(updates)
-      .eq("id", order.id);
-
-    if (error) return toast.error(error.message);
 
     toast.success(`Status → ${STATUS_LABELS[newStatus]}`);
 
@@ -902,27 +751,77 @@ export default function Orders() {
       }
     }
 
-    loadData();
+    await loadData(true);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    setUpdatingOrderId(null);
+    return true;
   }
-  async function startStageTimer(order) {
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        stage_started_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", order.id);
-
-    if (error) return toast.error(error.message);
-
-    toast.success(`Timer started for ${STATUS_LABELS[order.status]}`);
-    loadData();
-  }
-
   async function advanceStatus(order) {
-    const idx = STATUS_FLOW.indexOf(order.status);
-    if (idx < 0 || idx >= STATUS_FLOW.length - 1) return;
-    updateStatus(order, STATUS_FLOW[idx + 1]);
+    if (updatingOrderId === order.id) return;
+    const idx = PROCESS_FLOW.indexOf(order.status);
+    if (idx < 0 || idx >= PROCESS_FLOW.length - 1) return;
+    updateStatus(order, PROCESS_FLOW[idx + 1]);
+  }
+
+  function canDropIntoStage(order, targetStatus) {
+    const currentIndex = PROCESS_FLOW.indexOf(order?.status);
+    const targetIndex = PROCESS_FLOW.indexOf(targetStatus);
+    return currentIndex >= 0 && targetIndex >= 0 && Math.abs(targetIndex - currentIndex) === 1;
+  }
+
+  function openCorrection(order, targetStatus) {
+    setDragOrder(null);
+    setCorrectionOrder(order);
+    setCorrectionTarget(targetStatus);
+    setCorrectionReason("");
+  }
+
+  async function confirmCorrection(event) {
+    event.preventDefault();
+    if (!correctionOrder || !correctionTarget || !correctionReason.trim()) {
+      return toast.error("Please provide a reason for this correction");
+    }
+    const changed = await updateStatus(correctionOrder, correctionTarget, correctionReason.trim());
+    if (changed) {
+      setCorrectionOrder(null);
+      setCorrectionTarget("");
+      setCorrectionReason("");
+      toast.success("Order stage corrected and recorded in history");
+    }
+  }
+
+  function handleDragStart(event, order) {
+    // Only active, forward-movable orders can be dragged. This preserves the
+    // sequential Received → On Process → Ready workflow.
+    if (updatingOrderId === order.id || PROCESS_FLOW.indexOf(order.status) < 0) {
+      event.preventDefault();
+      return;
+    }
+    setDragOrder(order);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", order.id);
+  }
+
+  function handleDragEnd() {
+    setDragOrder(null);
+  }
+
+  function handleDragOver(event, targetStatus) {
+    if (!canDropIntoStage(dragOrder, targetStatus)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }
+
+  function handleDrop(event, targetStatus) {
+    event.preventDefault();
+    const order = dragOrder;
+    setDragOrder(null);
+    if (!canDropIntoStage(order, targetStatus)) return;
+    if (PROCESS_FLOW.indexOf(targetStatus) < PROCESS_FLOW.indexOf(order.status)) {
+      openCorrection(order, targetStatus);
+    } else {
+      updateStatus(order, targetStatus);
+    }
   }
 
   function openCancellation(order) {
@@ -939,7 +838,7 @@ export default function Orders() {
       toast.success("Order cancelled and branch inventory restored");
       setCancellingOrder(null);
       setCancellationReason("");
-      loadData();
+      loadData(true);
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -947,70 +846,8 @@ export default function Orders() {
     }
   }
 
-  function getTimeRemaining(order, settings) {
-    if (!order.stage_started_at) return "Waiting start";
-
-    const stageStart = new Date(order.stage_started_at).getTime();
-    const currentTime = now;
-
-    const durations = {
-      washing: (Number(settings.etawash) || 45) * 60000,
-      drying: (Number(settings.etadrying) || 40) * 60000,
-      folding: (Number(settings.etafolding) || 15) * 60000,
-    };
-
-    const duration = durations[order.status];
-    if (!duration) return "";
-
-    const remaining = stageStart + duration - currentTime;
-
-    if (remaining <= 0) return "Advancing...";
-
-    const minutes = Math.floor(remaining / 60000);
-    const seconds = Math.floor((remaining % 60000) / 1000);
-
-    return `${minutes}m ${seconds}s`;
-  }
-
   function toggleView(mode) {
     setViewMode(mode);
-  }
-
-  function handleDragStart(e, order) {
-    setDragOrder(order);
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", order.id);
-  }
-
-  function handleDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  }
-
-  function handleDrop(e, targetStatus) {
-    e.preventDefault();
-    if (dragOrder && dragOrder.status !== targetStatus) {
-      updateStatus(dragOrder, targetStatus);
-    }
-    setDragOrder(null);
-  }
-
-  // Compute per-stage stats for the overview bar
-  function computeStageStats(list) {
-    return STATUS_FLOW.reduce((acc, status) => {
-      const stageOrders = list.filter((o) => o.status === status);
-      const running = TIMED_STAGES.includes(status)
-        ? stageOrders.filter((o) => isTimerStarted(o.id)).length
-        : 0;
-      const waiting = TIMED_STAGES.includes(status)
-        ? stageOrders.length - running
-        : 0;
-      const capacity = TIMED_STAGES.includes(status)
-        ? getStageCapacity(status)
-        : null;
-      acc[status] = { total: stageOrders.length, running, waiting, capacity };
-      return acc;
-    }, {});
   }
 
   const source = searchInput ? allOrders : orders;
@@ -1083,15 +920,15 @@ export default function Orders() {
       {/* Kanban Board */}
       {viewMode === "board" && (
         <div className="kanban-board">
-          {STATUS_FLOW.map((status) => {
+          {PROCESS_FLOW.map((status) => {
             const columnOrders = filtered.filter((o) => o.status === status);
             return (
               <div
                 key={status}
-                className={`kanban-column ${dragOrder ? "drag-active" : ""}`}
+                className={`kanban-column ${dragOrder && canDropIntoStage(dragOrder, status) ? "drag-active" : ""}`}
                 data-stage={status}
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, status)}
+                onDragOver={(event) => handleDragOver(event, status)}
+                onDrop={(event) => handleDrop(event, status)}
               >
                 <div className="kanban-column-header">
                   <div className="kanban-column-title">
@@ -1107,18 +944,13 @@ export default function Orders() {
                     <div className="kanban-empty">No orders</div>
                   ) : (
                     columnOrders.map((order) => {
-                      const timerActive =
-                        TIMED_STAGES.includes(order.status) &&
-                        !!order.stage_started_at;
-                      const isQueued =
-                        TIMED_STAGES.includes(order.status) &&
-                        !order.stage_started_at;
                       return (
                         <div
                           key={order.id}
-                          className={`kanban-card ${timerActive ? "timer-live" : ""} ${isQueued ? "timer-queued" : ""}`}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, order)}
+                          className={`kanban-card ${dragOrder?.id === order.id ? "is-dragging" : ""}`}
+                          draggable={updatingOrderId !== order.id && PROCESS_FLOW.includes(order.status)}
+                          onDragStart={(event) => handleDragStart(event, order)}
+                          onDragEnd={handleDragEnd}
                         >
                           <div className="kanban-card-header">
                             <span className="kanban-order-num">
@@ -1160,41 +992,34 @@ export default function Orders() {
                               )}
                             </span>
                           </div>
-                          {TIMED_STAGES.includes(order.status) && (
+                          {!["ready", "released", "cancelled"].includes(order.status) && (
                             <div className="kanban-timer-row">
-                              {timerActive ? (
-                                <span className="timer-pill live">
-                                  <Clock size={10} />{" "}
-                                  {getTimeRemaining(order, settings)}
-                                </span>
-                              ) : (
-                                <span className="timer-pill queued">
-                                  Queued
-                                </span>
-                              )}
+                              <span className="timer-pill live"><Clock size={10} /> Ready by {formatOrderEta(order)}</span>
                             </div>
                           )}
+                          {isOrderOverdue(order) && (
+                            <div className="kanban-order-alert"><TriangleAlert size={11} /> ETA overdue</div>
+                          )}
+                          {order.eta_revised_at && <div className="kanban-order-note">ETA revised after correction</div>}
                           <div className="kanban-card-actions">
-                            {TIMED_STAGES.includes(order.status) &&
-                              !AUTO_TIMER_STAGES.includes(order.status) &&
-                              !order.stage_started_at && (
-                                <button
-                                  className="btn-icon btn-start"
-                                  title="Start timer"
-                                  onClick={() => startStageTimer(order)}
-                                >
-                                  <Play size={12} />
-                                </button>
-                              )}
-                            {!["released", "cancelled"].includes(
-                              order.status,
-                            ) && (
+                            {PROCESS_FLOW.includes(order.status) && order.status !== "received" && (
                               <button
                                 className="btn-icon"
-                                title={`Move to ${STATUS_LABELS[STATUS_FLOW[STATUS_FLOW.indexOf(order.status) + 1]]}`}
+                                disabled={updatingOrderId === order.id}
+                                title={`Move back to ${STATUS_LABELS[PROCESS_FLOW[PROCESS_FLOW.indexOf(order.status) - 1]]}`}
+                                onClick={() => openCorrection(order, PROCESS_FLOW[PROCESS_FLOW.indexOf(order.status) - 1])}
+                              >
+                                <RotateCcw size={12} />
+                              </button>
+                            )}
+                            {PROCESS_FLOW.includes(order.status) && order.status !== "ready" && (
+                              <button
+                                className="btn-icon"
+                                disabled={updatingOrderId === order.id}
+                                title={order.status === "received" ? "Start Processing" : "Mark Ready for Pickup"}
                                 onClick={() => advanceStatus(order)}
                               >
-                                <ArrowRight size={12} />
+                                {updatingOrderId === order.id ? <Loader2 size={12} className="button-spinner" /> : <ArrowRight size={12} />}
                               </button>
                             )}
                           </div>
@@ -1212,7 +1037,7 @@ export default function Orders() {
       {/* Table */}
       {viewMode === "table" && (
         <div className="card" style={{ padding: 0 }}>
-          <div className="table-wrapper">
+          <div className={`table-wrapper orders-table-wrapper ${tableLoading ? "is-refreshing" : ""}`}>
             <table>
               <thead>
                 <tr>
@@ -1221,7 +1046,7 @@ export default function Orders() {
                   {isAdmin && <th>Branch</th>}
                   <th>Weight</th>
                   <th>Status</th>
-                  <th>Time Left</th>
+                  <th>Estimated Ready</th>
                   <th>Payment</th>
                   <th>Amount</th>
                   <th>Date</th>
@@ -1256,10 +1081,8 @@ export default function Orders() {
                       <td>
                         <div className="status-track">
                           <div className="status-dots">
-                            {STATUS_FLOW.map((s, i) => {
-                              const currentIdx = STATUS_FLOW.indexOf(
-                                order.status,
-                              );
+                            {PROCESS_FLOW.map((s, i) => {
+                              const currentIdx = order.status === "released" ? PROCESS_FLOW.length - 1 : PROCESS_FLOW.indexOf(order.status);
                               const isDone = i <= currentIdx;
                               return (
                                 <div
@@ -1283,27 +1106,24 @@ export default function Orders() {
                             <span className={`badge badge-${order.status}`}>
                               {STATUS_LABELS[order.status]}
                             </span>
-                            {TIMED_STAGES.includes(order.status) &&
-                              !AUTO_TIMER_STAGES.includes(order.status) &&
-                              !order.stage_started_at && (
-                                <button
-                                  className="status-next-btn"
-                                  style={{ background: "#16a34a" }}
-                                  onClick={() => startStageTimer(order)}
-                                  title="Start stage timer"
-                                >
-                                  <Play size={14} />
-                                </button>
-                              )}
-                            {!["released", "cancelled"].includes(
-                              order.status,
-                            ) && (
+                            {PROCESS_FLOW.includes(order.status) && order.status !== "ready" && (
                               <button
                                 className="status-next-btn"
+                                disabled={updatingOrderId === order.id}
                                 onClick={() => advanceStatus(order)}
-                                title={`Move to ${STATUS_LABELS[STATUS_FLOW[STATUS_FLOW.indexOf(order.status) + 1]]}`}
+                                title={order.status === "received" ? "Start Processing" : "Mark Ready for Pickup"}
                               >
-                                <ArrowRight size={14} />
+                                {updatingOrderId === order.id ? <Loader2 size={14} className="button-spinner" /> : <ArrowRight size={14} />}
+                              </button>
+                            )}
+                            {PROCESS_FLOW.includes(order.status) && order.status !== "received" && (
+                              <button
+                                className="status-next-btn status-undo-btn"
+                                disabled={updatingOrderId === order.id}
+                                onClick={() => openCorrection(order, PROCESS_FLOW[PROCESS_FLOW.indexOf(order.status) - 1])}
+                                title={`Correct back to ${STATUS_LABELS[PROCESS_FLOW[PROCESS_FLOW.indexOf(order.status) - 1]]}`}
+                              >
+                                <RotateCcw size={13} />
                               </button>
                             )}
                           </div>
@@ -1313,19 +1133,12 @@ export default function Orders() {
                         {["released", "cancelled"].includes(order.status) ? (
                           "\u2014"
                         ) : (
-                          <span
-                            style={{
-                              color: "var(--primary-light)",
-                              fontWeight: 600,
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 4,
-                            }}
-                          >
-                            <Clock size={14} />{" "}
-                            {getTimeRemaining(order, settings) || "\u2014"}
+                          <span style={{ color: "var(--primary-light)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                            <Clock size={14} /> {formatOrderEta(order)}
                           </span>
                         )}
+                        {isOrderOverdue(order) && <span className="order-eta-warning"><TriangleAlert size={13} /> Overdue</span>}
+                        {order.eta_revised_at && <span className="order-eta-revised">Revised ETA</span>}
                       </td>
                       <td>
                         <span className={`badge badge-${order.payment_status}`}>
@@ -1352,13 +1165,20 @@ export default function Orders() {
                       </td>
                       <td>
                         <div style={{ display: "flex", gap: 4 }}>
-                          <button
-                            className="btn-icon"
-                            title="Edit"
-                            onClick={() => openEdit(order)}
-                          >
-                            <Edit2 size={16} />
-                          </button>
+                          {order.status !== "cancelled" && (
+                            <button
+                              className="btn-icon"
+                              title="Edit"
+                              onClick={() => openEdit(order)}
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                          )}
+                          {order.status === "ready" && (
+                            <button className="btn-icon" title="Release order after pickup/payment" onClick={() => updateStatus(order, "released")}>
+                              <CheckCircle2 size={16} />
+                            </button>
+                          )}
                           {!['released', 'cancelled'].includes(order.status) && (
                             <button
                               className="btn-icon"
@@ -1392,7 +1212,7 @@ export default function Orders() {
                   <button
                     className="btn btn-sm"
                     disabled={page === 0}
-                    onClick={() => setPage(0)}
+                    onClick={() => goToPage(0)}
                     style={{
                       opacity: page === 0 ? 0.4 : 1,
                       padding: "6px 10px",
@@ -1405,7 +1225,7 @@ export default function Orders() {
                   <button
                     className="btn btn-sm"
                     disabled={page === 0}
-                    onClick={() => setPage((p) => Math.max(p - 1, 0))}
+                    onClick={() => goToPage(page - 1)}
                     style={{
                       opacity: page === 0 ? 0.4 : 1,
                       padding: "6px 10px",
@@ -1433,7 +1253,7 @@ export default function Orders() {
                       pages.push(
                         <button
                           key={i}
-                          onClick={() => setPage(i)}
+                          onClick={() => goToPage(i)}
                           style={{
                             minWidth: 36,
                             height: 36,
@@ -1460,9 +1280,7 @@ export default function Orders() {
                   <button
                     className="btn btn-sm"
                     disabled={page + 1 >= totalPages}
-                    onClick={() =>
-                      setPage((p) => (p + 1 < totalPages ? p + 1 : p))
-                    }
+                    onClick={() => goToPage(page + 1)}
                     style={{
                       opacity: page + 1 >= totalPages ? 0.4 : 1,
                       padding: "6px 10px",
@@ -1475,7 +1293,7 @@ export default function Orders() {
                   <button
                     className="btn btn-sm"
                     disabled={page + 1 >= totalPages}
-                    onClick={() => setPage(totalPages - 1)}
+                    onClick={() => goToPage(totalPages - 1)}
                     style={{
                       opacity: page + 1 >= totalPages ? 0.4 : 1,
                       padding: "6px 10px",
@@ -1498,7 +1316,45 @@ export default function Orders() {
                 </div>
               </div>
             )}
+            {tableLoading && (
+              <div className="orders-table-loading" role="status" aria-live="polite">
+                <Loader2 size={22} className="button-spinner" />
+                <span>Loading orders…</span>
+              </div>
+            )}
           </div>
+        </div>
+      )}
+
+      {correctionOrder && (
+        <div className="modal-overlay" onMouseDown={() => !updatingOrderId && setCorrectionOrder(null)}>
+          <section className="order-correction-dialog" role="dialog" aria-modal="true" aria-labelledby="correction-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="order-correction-icon"><RotateCcw size={22} /></div>
+            <h3 id="correction-title">Correct order stage</h3>
+            <p>
+              Move <strong>{correctionOrder.order_number}</strong> back from {STATUS_LABELS[correctionOrder.status]} to <strong>{STATUS_LABELS[correctionTarget]}</strong>.
+              This correction is recorded in the order history and may revise the customer ETA.
+            </p>
+            <form onSubmit={confirmCorrection}>
+              <label htmlFor="correction-reason">Reason for correction</label>
+              <textarea
+                id="correction-reason"
+                className="form-control"
+                value={correctionReason}
+                onChange={(event) => setCorrectionReason(event.target.value)}
+                placeholder="Example: Order was marked ready by mistake"
+                rows={3}
+                required
+                autoFocus
+              />
+              <div className="order-correction-actions">
+                <button type="button" className="btn btn-secondary" disabled={Boolean(updatingOrderId)} onClick={() => setCorrectionOrder(null)}>Keep current stage</button>
+                <button type="submit" className="btn btn-primary" disabled={Boolean(updatingOrderId)}>
+                  {updatingOrderId ? <><Loader2 size={16} className="button-spinner" /> Saving…</> : <><RotateCcw size={16} /> Confirm correction</>}
+                </button>
+              </div>
+            </form>
+          </section>
         </div>
       )}
 

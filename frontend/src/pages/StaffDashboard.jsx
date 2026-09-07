@@ -7,17 +7,15 @@ import {
   Clock, AlertTriangle, ShoppingBag, CheckCircle2, Timer, User, RefreshCw, Package
 } from 'lucide-react'
 
-const STATUS_FLOW = ['washing', 'drying', 'folding', 'ready']
+const STATUS_FLOW = ['received', 'on_process', 'ready']
 const STATUS_LABELS = {
-  washing: 'Wash',
-  drying: 'Dry',
-  folding: 'Fold',
+  received: 'Received',
+  on_process: 'On Process',
   ready: 'Ready',
 }
 const STATUS_ICONS = {
-  washing: '🧺',
-  drying: '☀️',
-  folding: '👕',
+  received: '📥',
+  on_process: '⚙️',
   ready: '✅',
 }
 
@@ -27,9 +25,11 @@ export default function StaffDashboard() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    setLoadError('')
+  const loadData = useCallback(async (background = false) => {
+    if (!background) {
+      setLoading(true)
+      setLoadError('')
+    }
     try {
       const [ordersRes, inventoryRes] = await Promise.all([
         supabase.from('orders').select('*, customers(name, phone), service_types(name)')
@@ -41,16 +41,17 @@ export default function StaffDashboard() {
       setOrders([...(ordersRes.data || [])].sort(compareOrdersForList))
       setInventory(inventoryRes.data || [])
     } catch (error) {
-      setLoadError(error.message || 'Unable to load your branch dashboard.')
+      if (!background) setLoadError(error.message || 'Unable to load your branch dashboard.')
+      else console.error('Background staff dashboard refresh failed:', error)
     } finally {
-      setLoading(false)
+      if (!background) setLoading(false)
     }
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
 
   // Realtime: refresh when orders or inventory change
-  useRealtime(['orders', 'inventory_items'], loadData)
+  useRealtime(['orders', 'inventory_items'], () => loadData(true))
 
   function getTimeRemaining(estimatedCompletion) {
     if (!estimatedCompletion) return null
@@ -187,7 +188,7 @@ export default function StaffDashboard() {
                       <span className="kanban-card-price">₱{Number(order.total_price).toLocaleString()}</span>
                       <span className="kanban-card-time">
                         {status !== 'ready' && (
-                          <><Clock size={12} /> {getTimeRemaining(order.estimated_completion) || '—'}</>
+                          <><Clock size={12} /> {getTimeRemaining(order.estimated_ready_at) || 'ETA unavailable'}</>
                         )}
                         {status === 'ready' && <><CheckCircle2 size={12} /> Ready</>}
                       </span>

@@ -1,11 +1,24 @@
 import { AlertCircle, RefreshCw } from "lucide-react";
 import React from "react";
 
+export function LoadingVisual({ label = "Loading data…", compact = false }) {
+  return (
+    <div className={`dashboard-chart-loading shared-loading-visual ${compact ? "shared-loading-compact" : ""}`} role="status" aria-live="polite">
+      <div className="dashboard-chart-loading-header"><span className="dashboard-chart-loading-title" /><span className="dashboard-chart-loading-chip" /></div>
+      <div className="dashboard-chart-loading-body">
+        <span className="dashboard-chart-axis y" />
+        <div className="dashboard-chart-bars">{[38, 62, 48, 78, 55, 86, 68].map((height, index) => <span key={index} style={{ height: `${height}%` }} />)}</div>
+        <span className="dashboard-chart-axis x" />
+      </div>
+      <p>{label}</p>
+    </div>
+  );
+}
+
 export function PageLoader({ label = "Loading data…" }) {
   return (
     <div className="async-state" role="status" aria-live="polite">
-      <div className="async-loader-orbit"><div className="async-loader-dot" /></div>
-      <strong>{label}</strong>
+      <LoadingVisual label={label} compact />
       <span>Please wait a moment.</span>
     </div>
   );

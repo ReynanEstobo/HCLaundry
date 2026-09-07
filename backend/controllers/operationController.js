@@ -77,3 +77,30 @@ export async function cancelOrder(body, identity) {
   if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
   return { data }
 }
+
+export async function transitionOrder(body, identity) {
+  const orderId = body?.orderId
+  const nextStatus = String(body?.status || '').trim()
+  const correctionReason = String(body?.correctionReason || '').trim()
+  if (!orderId || !['received', 'on_process', 'ready', 'released'].includes(nextStatus)) {
+    throw Object.assign(new Error('A valid order stage is required.'), { status: 400 })
+  }
+  requireBranch(identity)
+  const { data: order, error: orderError } = await database
+    .from('orders')
+    .select('id, branch_id, status')
+    .eq('id', orderId)
+    .maybeSingle()
+  if (orderError || !order) throw Object.assign(new Error('Order not found.'), { status: 404 })
+  if (identity.role !== 'admin' && order.branch_id !== identity.branchId) {
+    throw Object.assign(new Error('You can only update orders assigned to your branch.'), { status: 403 })
+  }
+  const { data, error } = await database.rpc('transition_branch_order', {
+    p_order_id: orderId,
+    p_staff_id: identity.staffId,
+    p_new_status: nextStatus,
+    p_correction_reason: correctionReason || null,
+  })
+  if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
+  return { data }
+}

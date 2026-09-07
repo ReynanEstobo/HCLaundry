@@ -31,7 +31,7 @@ async function main() {
     hour12: true,
   });
 
-  const body = `Hi Test Customer,\n\nThank you for choosing 4J Laundry! Your garment has been received and is now being processed.\n\nOrder Details:\n• Order Number: 4J-TEST-0001\n• Service: Regular Wash\n• Weight: 8 kg\n• Total: ₱215\n\nEstimated Completion Time: 2 hours 30 minutes (approximately ${completionText})\n\nWe'll notify you via email once your laundry is ready for pickup.\n\nThank you!\n\n— 4J Laundry Team`;
+  const body = `Hi Test Customer,\n\nThank you for choosing H&C Laundry! Your garment has been received and is now being processed.\n\nOrder Details:\n• Order Number: HC-TEST-0001\n• Service: Regular Wash\n• Weight: 8 kg\n• Total: ₱215\n\nEstimated Completion Time: 2 hours 30 minutes (approximately ${completionText})\n\nWe'll notify you via email once your laundry is ready for pickup.\n\nThank you!\n\n— H&C Laundry Team`;
 
   const lines = body
     .split("\n")
@@ -40,22 +40,22 @@ async function main() {
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px; background: #f9fafb; border-radius: 12px;">
       <div style="text-align: center; margin-bottom: 24px;">
-        <h2 style="margin: 0; color: #111827; font-size: 20px;">🧺 4J Laundry</h2>
+        <h2 style="margin: 0; color: #111827; font-size: 20px;">🧺 H&C Laundry</h2>
       </div>
       <div style="background: #fff; border-radius: 10px; padding: 24px; border: 1px solid #e5e7eb;">
-        <h3 style="margin: 0 0 16px; color: #111827; font-size: 16px;">Order Received! (Order #4J-TEST-0001)</h3>
+        <h3 style="margin: 0 0 16px; color: #111827; font-size: 16px;">Order Received! (Order #HC-TEST-0001)</h3>
         <div style="color: #374151; font-size: 14px; line-height: 1.6;">${lines}</div>
       </div>
       <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-        <p>This is an automated notification from 4J Laundry Management System</p>
+        <p>This is an automated notification from H&C Laundry Management System</p>
       </div>
     </div>`;
 
   try {
     const info = await transporter.sendMail({
-      from: `"4J Laundry" <${GMAIL_EMAIL}>`,
+      from: `"H&C Laundry" <${GMAIL_EMAIL}>`,
       to: testTo,
-      subject: "Order Received! (Order #4J-TEST-0001)",
+      subject: "Order Received! (Order #HC-TEST-0001)",
       text: body,
       html,
     });

@@ -31,18 +31,30 @@ function applyFilters(query, filters = []) {
   }, query)
 }
 
-// Keep operational queues focused on actionable work. Released orders remain
-// visible after active work, while cancelled orders are preserved for audit
-// purposes but always appear at the bottom of an unfiltered order list.
+// Keep operational queues focused on today's actionable work, then older open
+// work, released history, and finally cancelled history.
 function compareOrdersForList(a, b) {
   const rank = order => order?.status === 'cancelled' ? 2 : order?.status === 'released' ? 1 : 0
   const rankDifference = rank(a) - rank(b)
   if (rankDifference !== 0) return rankDifference
 
+  const isToday = value => {
+    const date = new Date(value || 0)
+    const today = new Date()
+    return date.getFullYear() === today.getFullYear()
+      && date.getMonth() === today.getMonth()
+      && date.getDate() === today.getDate()
+  }
+  if (rank(a) === 0) {
+    const todayDifference = Number(isToday(b?.created_at)) - Number(isToday(a?.created_at))
+    if (todayDifference !== 0) return todayDifference
+  }
+
   const priorityDifference = Number(a?.priority_order ?? 0) - Number(b?.priority_order ?? 0)
   if (priorityDifference !== 0) return priorityDifference
 
-  return new Date(a?.created_at || 0).getTime() - new Date(b?.created_at || 0).getTime()
+  const createdDifference = new Date(a?.created_at || 0).getTime() - new Date(b?.created_at || 0).getTime()
+  return isToday(a?.created_at) ? -createdDifference : createdDifference
 }
 
 // Operational data must never cross a staff member's assigned branch. Branch
@@ -118,14 +130,17 @@ async function assertInventoryRecordOwnership(table, request, identity) {
 
 export async function execute(table, request, identity) {
   if (!TABLES.has(table)) throw Object.assign(new Error('Unknown resource'), { status: 404 })
+  if (table === 'settings' && request.operation !== 'select' && identity.role !== 'admin') {
+    throw Object.assign(new Error('Only administrators can change business settings.'), { status: 403 })
+  }
   if (SOFT_DELETABLE_TABLES.has(table) && ['insert', 'update'].includes(request.operation)) {
     const entries = Array.isArray(request.payload) ? request.payload : [request.payload || {}]
     if (entries.some(entry => Object.hasOwn(entry, 'deleted_at') || Object.hasOwn(entry, 'deleted_by_staff_id'))) {
       throw Object.assign(new Error('Deletion fields can only be changed through the secure Recycle Bin workflow.'), { status: 403 })
     }
   }
-  if (table === 'orders' && request.operation === 'update' && request.payload?.status === 'cancelled') {
-    throw Object.assign(new Error('Orders must be cancelled through the secure cancellation workflow.'), { status: 403 })
+  if (table === 'orders' && request.operation === 'update' && Object.hasOwn(request.payload || {}, 'status')) {
+    throw Object.assign(new Error('Order stages can only be changed through the secure workflow.'), { status: 403 })
   }
   if (BRANCH_SCOPED_TABLES.has(table)) {
     request = identity.role === 'admin'

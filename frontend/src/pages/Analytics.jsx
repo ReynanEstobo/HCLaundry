@@ -29,7 +29,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { generateAiForecast, generateDecisionSupport } from "../services/geminiService";
-import { PageError, PageLoader } from "../components/AsyncState";
+import { LoadingVisual, PageError, PageLoader } from "../components/AsyncState";
 
 // ─── Custom tooltip ────────────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
@@ -191,7 +191,7 @@ export default function Analytics() {
   }, [range, customRange, selectedBranch]);
 
   useRealtime(["orders", "expenses"], () => {
-    loadAnalytics(false);
+    loadAnalytics(true);
   });
   useEffect(() => {
     if (aiLoading || manualAiRefresh) return;
@@ -201,12 +201,14 @@ export default function Analytics() {
     }
   }, [forecastData, selectedBranch, range, operationalSummary, manualAiRefresh]);
 
-  async function loadAnalytics() {
-    setLoading(true);
-    setLoadError("");
-    setForecastAiMeta({ source: "pending", savedAt: null, isCached: false });
-    setInsightAiMeta({ source: "pending", savedAt: null, isCached: false });
-    setAiInsights([]);
+  async function loadAnalytics(background = false) {
+    if (!background) {
+      setLoading(true);
+      setLoadError("");
+      setForecastAiMeta({ source: "pending", savedAt: null, isCached: false });
+      setInsightAiMeta({ source: "pending", savedAt: null, isCached: false });
+      setAiInsights([]);
+    }
     try {
 
     const now = new Date();
@@ -327,9 +329,10 @@ export default function Analytics() {
     generateForecast(orderData);
 
     } catch (error) {
-      setLoadError(error.message || "Unable to load analytics data.");
+      if (!background) setLoadError(error.message || "Unable to load analytics data.");
+      else console.error("Background analytics refresh failed:", error);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }
 
@@ -720,7 +723,7 @@ export default function Analytics() {
 
       /* Legacy free-form DSS prompt retained only as a reference.
       const aiResult = await askGemini(`
-You are an AI-Based Decision Support System for I&C Laundry Hub.
+You are an AI-Based Decision Support System for H&C Laundry.
 
 Analyze the ACTUAL analytics trends below.
 
@@ -839,7 +842,7 @@ Rules:
 
   function downloadReportCsv() {
     const rows = [
-      ["4J Laundry Analytics Report"],
+      ["H&C Laundry Analytics Report"],
       ["Scope", reportScope],
       ["Period", reportPeriod],
       ["Generated", new Date().toLocaleString("en-PH")],
@@ -872,7 +875,7 @@ Rules:
     const blob = new Blob([rows.map((row) => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `4j-laundry-analytics-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `hc-laundry-analytics-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
   }
@@ -888,7 +891,7 @@ Rules:
       : "<li>No decision-support insights are available for this scope.</li>";
     const serviceRows = operationalSummary.topServices.map((item) => `<tr><td>${html(item.name)}</td><td>${item.orders}</td><td>${peso(item.revenue)}</td></tr>`).join("") || "<tr><td colspan=\"3\">No service data</td></tr>";
     const branchRows = operationalSummary.topBranches.map((item) => `<tr><td>${html(item.name)}</td><td>${item.orders}</td><td>${peso(item.revenue)}</td></tr>`).join("") || "<tr><td colspan=\"3\">No branch data</td></tr>";
-    popup.document.write(`<!doctype html><html><head><title>4J Laundry Analytics Report</title><style>body{font-family:Arial,sans-serif;color:#172033;padding:32px;line-height:1.45}h1{color:#0f8fc4;margin:0}h2{font-size:16px;margin:28px 0 10px}.meta{color:#667085}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}.card{border:1px solid #dbe3ec;border-radius:8px;padding:12px}.label{color:#667085;font-size:12px}.value{font-size:19px;font-weight:700;margin-top:4px}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #dbe3ec;padding:8px;text-align:left;font-size:13px}th{background:#f3f8fb}li{margin:9px 0}@media print{body{padding:0}}</style></head><body><h1>4J Laundry Analytics Report</h1><p class=\"meta\"><strong>Scope:</strong> ${html(reportScope)} &nbsp; | &nbsp; <strong>Period:</strong> ${html(reportPeriod)}<br><strong>Generated:</strong> ${html(new Date().toLocaleString("en-PH"))}</p><div class=\"cards\"><div class=\"card\"><div class=\"label\">Total Revenue</div><div class=\"value\">${peso(stats.totalRevenue)}</div></div><div class=\"card\"><div class=\"label\">Total Expenses</div><div class=\"value\">${peso(stats.totalExpenses)}</div></div><div class=\"card\"><div class=\"label\">Net Profit</div><div class=\"value\">${peso(stats.profit)}</div></div><div class=\"card\"><div class=\"label\">Total Orders</div><div class=\"value\">${stats.totalOrders || 0}</div></div></div><h2>High-Performing Services</h2><table><tr><th>Service</th><th>Orders</th><th>Revenue Received</th></tr>${serviceRows}</table><h2>Branch Performance</h2><table><tr><th>Branch</th><th>Orders</th><th>Revenue Received</th></tr>${branchRows}</table><h2>AI-Assisted Decision Support</h2><ul>${insightMarkup}</ul><p class=\"meta\">Forecast method: ${html(forecastModel || "Not available")}</p></body></html>`);
+    popup.document.write(`<!doctype html><html><head><title>H&C Laundry Analytics Report</title><style>body{font-family:Arial,sans-serif;color:#172033;padding:32px;line-height:1.45}h1{color:#0f8fc4;margin:0}h2{font-size:16px;margin:28px 0 10px}.meta{color:#667085}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}.card{border:1px solid #dbe3ec;border-radius:8px;padding:12px}.label{color:#667085;font-size:12px}.value{font-size:19px;font-weight:700;margin-top:4px}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #dbe3ec;padding:8px;text-align:left;font-size:13px}th{background:#f3f8fb}li{margin:9px 0}@media print{body{padding:0}}</style></head><body><h1>H&C Laundry Analytics Report</h1><p class=\"meta\"><strong>Scope:</strong> ${html(reportScope)} &nbsp; | &nbsp; <strong>Period:</strong> ${html(reportPeriod)}<br><strong>Generated:</strong> ${html(new Date().toLocaleString("en-PH"))}</p><div class=\"cards\"><div class=\"card\"><div class=\"label\">Total Revenue</div><div class=\"value\">${peso(stats.totalRevenue)}</div></div><div class=\"card\"><div class=\"label\">Total Expenses</div><div class=\"value\">${peso(stats.totalExpenses)}</div></div><div class=\"card\"><div class=\"label\">Net Profit</div><div class=\"value\">${peso(stats.profit)}</div></div><div class=\"card\"><div class=\"label\">Total Orders</div><div class=\"value\">${stats.totalOrders || 0}</div></div></div><h2>High-Performing Services</h2><table><tr><th>Service</th><th>Orders</th><th>Revenue Received</th></tr>${serviceRows}</table><h2>Branch Performance</h2><table><tr><th>Branch</th><th>Orders</th><th>Revenue Received</th></tr>${branchRows}</table><h2>AI-Assisted Decision Support</h2><ul>${insightMarkup}</ul><p class=\"meta\">Forecast method: ${html(forecastModel || "Not available")}</p></body></html>`);
     popup.document.close();
     popup.focus();
     window.setTimeout(() => popup.print(), 250);
@@ -1172,7 +1175,7 @@ Rules:
                 color: "#6b7280",
               }}
             >
-              <div className="spinner" />
+              <LoadingVisual label="Generating AI revenue forecast…" compact />
               <strong style={{ color: "#5b21b6" }}>
                 Generating AI revenue forecast
               </strong>

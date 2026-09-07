@@ -23,9 +23,11 @@ export default function Notifications() {
   // ─────────────────────────────────────
   // LOAD DATA
   // ─────────────────────────────────────
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
+  const loadData = useCallback(async (background = false) => {
+    if (!background) {
+      setLoading(true);
+      setLoadError("");
+    }
     try {
     const { data: ordersData, error } = await supabase
       .from("orders")
@@ -38,7 +40,7 @@ export default function Notifications() {
           )
         `,
       )
-      .in("status", ["washing", "drying", "folding", "ready"])
+      .in("status", ["received", "on_process", "ready"])
       .order("created_at", {
         ascending: false,
       });
@@ -46,9 +48,10 @@ export default function Notifications() {
     if (error) throw error;
     setOrders([...(ordersData || [])].sort(compareOrdersForList));
     } catch (error) {
-      setLoadError(error.message || "Unable to load notification data.");
+      if (!background) setLoadError(error.message || "Unable to load notification data.");
+      else console.error("Background notification refresh failed:", error);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
 
@@ -59,7 +62,7 @@ export default function Notifications() {
   // ─────────────────────────────────────
   // REALTIME
   // ─────────────────────────────────────
-  useRealtime(["orders"], loadData);
+  useRealtime(["orders"], () => loadData(true));
 
   // ─────────────────────────────────────
   // SEND EMAIL
@@ -130,13 +133,13 @@ export default function Notifications() {
 
 Great news! Your laundry (Order #${
             order.order_number
-          }) is now ready for pickup at I&C Laundry Hub.
+          }) is now ready for pickup at H&C Laundry.
 
 Please pick it up at your earliest convenience during our business hours.
 
-Thank you for choosing I&C Laundry Hub!
+Thank you for choosing H&C Laundry!
 
-— I&C Laundry Hub Team`,
+— H&C Laundry Team`,
         }),
       });
 

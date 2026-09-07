@@ -1,4 +1,4 @@
-const SESSION_KEY = '4j-laundry-session'
+const SESSION_KEY = 'hc-laundry-session'
 const resourcePaths = {
   customers: '/api/customers', orders: '/api/orders', inventory_items: '/api/inventory/items',
   inventory_categories: '/api/inventory/categories', inventory_usage_log: '/api/inventory/usage',

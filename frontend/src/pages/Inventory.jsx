@@ -55,9 +55,11 @@ export default function Inventory() {
     usage_per_load: "",
   });
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
+  const loadData = useCallback(async (background = false) => {
+    if (!background) {
+      setLoading(true);
+      setLoadError("");
+    }
     try {
       const [itemsRes, catRes, usageRes] = await Promise.all([
         supabase.from("inventory_items").select("*, inventory_categories(name)").order("name"),
@@ -70,9 +72,10 @@ export default function Inventory() {
       setCategories(catRes.data || []);
       setUsageLogs(usageRes.data || []);
     } catch (error) {
-      setLoadError(error.message || "Unable to load inventory data.");
+      if (!background) setLoadError(error.message || "Unable to load inventory data.");
+      else console.error("Background inventory refresh failed:", error);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
 
@@ -88,7 +91,7 @@ export default function Inventory() {
       "inventory_usage_log",
       "inventory_restocks",
     ],
-    loadData,
+    () => loadData(true),
   );
 
   // ===== STOCK PREDICTION =====
@@ -200,7 +203,7 @@ export default function Inventory() {
     if (error) return toast.error(error.message);
     toast.success(editing ? "Item updated!" : "Item added!");
     setShowModal(false);
-    loadData();
+    loadData(true);
   }
 
   async function handleRestock(e) {
@@ -224,7 +227,7 @@ export default function Inventory() {
     setRestockQty("");
     setRestockCost("");
     setRestockSupplier("");
-    loadData();
+    loadData(true);
   }
 
   async function deleteItem() {
@@ -238,7 +241,7 @@ export default function Inventory() {
       if (error) throw error;
       toast.success("Item moved to Recycle Bin");
       setItemToDelete(null);
-      loadData();
+      loadData(true);
     } catch (error) {
       toast.error(error.message);
     } finally {

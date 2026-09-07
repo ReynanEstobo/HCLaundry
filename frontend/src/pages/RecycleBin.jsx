@@ -22,17 +22,20 @@ export default function RecycleBin() {
   const [restoringId, setRestoringId] = useState('')
   const [recordToRestore, setRecordToRestore] = useState(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
+  const load = useCallback(async (background = false) => {
+    if (!background) {
+      setLoading(true)
+      setError('')
+    }
     try {
       const data = await getRecycleBin()
       setRecords(data.records || [])
       setLogs(data.logs || [])
     } catch (requestError) {
-      setError(requestError.message || 'Unable to load the Recycle Bin.')
+      if (!background) setError(requestError.message || 'Unable to load the Recycle Bin.')
+      else console.error('Background Recycle Bin refresh failed:', requestError)
     } finally {
-      setLoading(false)
+      if (!background) setLoading(false)
     }
   }, [])
 
@@ -46,7 +49,7 @@ export default function RecycleBin() {
       await restoreDeletedRecord(record.table_name, record.id)
       toast.success(`${labels[record.table_name] || 'Record'} restored`)
       setRecordToRestore(null)
-      await load()
+      await load(true)
     } catch (requestError) {
       toast.error(requestError.message)
     } finally {

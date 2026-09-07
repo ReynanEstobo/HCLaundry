@@ -9,6 +9,7 @@ import {
   PanelLeftClose,
   Settings,
   ArchiveRestore,
+  MapPin,
   ShoppingBag,
   UserCog,
   Users,
@@ -57,12 +58,12 @@ const pageNames = {
 };
 
 export default function Layout() {
-  const { signOut, user, role, staffName } = useAuth();
+  const { signOut, user, role, staffName, branch } = useAuth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return (
-        JSON.parse(localStorage.getItem("I&C Laundry Hub_collapsed")) || false
+        JSON.parse(localStorage.getItem("hc_laundry_collapsed")) || false
       );
     } catch {
       return false;
@@ -71,7 +72,7 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem("I&C Laundry Hub", JSON.stringify(collapsed));
+    localStorage.setItem("hc_laundry_collapsed", JSON.stringify(collapsed));
   }, [collapsed]);
 
   // Close mobile sidebar on nav
@@ -91,13 +92,13 @@ export default function Layout() {
           <div className="brand-icon">
             <img
               src="/assets/Rectangle.png"
-              alt="I&C Laundry Hub"
+              alt="H&C Laundry"
               style={{ width: 52, height: 52, objectFit: "contain" }}
             />
           </div>
           {!collapsed && (
             <div>
-              <h1>I&C Laundry Hub</h1>
+              <h1>H&C Laundry</h1>
               <span>Management System</span>
             </div>
           )}
@@ -184,6 +185,12 @@ export default function Layout() {
                   {staffName || (role === "admin" ? "Admin" : "Staff")}
                 </span>
                 <span className="top-bar-user-email">{user?.email}</span>
+                {role !== "admin" && branch && (
+                  <span className="top-bar-user-branch" title={`Assigned branch: ${branch}`}>
+                    <MapPin size={11} aria-hidden="true" />
+                    {branch}
+                  </span>
+                )}
               </div>
             </div>
           </div>

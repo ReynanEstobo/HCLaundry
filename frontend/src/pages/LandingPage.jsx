@@ -295,82 +295,17 @@ export default function LandingPage() {
   }, []);
 
   const TRACK_STAGES = [
-    "pending",
-    "washing",
-    "drying",
-    "folding",
+    "received",
+    "on_process",
     "ready",
-    "released",
   ];
-  const getStageDurations = () => ({
-    pending: 0,
-    washing: Number(settings.etawash) || 45,
-    drying: Number(settings.etadrying) || 40,
-    folding: Number(settings.etafolding) || 15,
-    ready: 0,
-    released: 0,
-  });
-
-  function calculateETA(order) {
-    const durations = getStageDurations();
-
-    const normalizedStatus = (order.status || "").toLowerCase().trim();
-
-    const safeStatus = TRACK_STAGES.includes(normalizedStatus)
-      ? normalizedStatus
-      : "pending";
-
-    if (safeStatus === "released") return null;
-
-    const currentIndex = TRACK_STAGES.indexOf(safeStatus);
-
-    let remainingMinutes = 0;
-
-    for (let i = currentIndex; i < TRACK_STAGES.length; i++) {
-      const stage = TRACK_STAGES[i];
-
-      if (stage === "released") break;
-
-      remainingMinutes += durations[stage] || 0;
-    }
-
-    const eta = new Date(Date.now() + remainingMinutes * 60000);
-
-    return { eta, remainingMinutes };
-  }
 
   const STAGE_LABELS = {
-    pending: "Pending",
-    washing: "Washing",
-    drying: "Drying",
-    folding: "Folding",
+    received: "Received",
+    on_process: "On Process",
     ready: "Ready for pick-up",
     released: "Released",
   };
-  function getTimeRemaining(order) {
-    if (!order.stage_started_at) return "Queued";
-
-    const stageStart = new Date(order.stage_started_at).getTime();
-    const now = Date.now();
-
-    const durations = {
-      washing: (Number(settings.etawash) || 10) * 60000,
-      drying: (Number(settings.etadrying) || 10) * 60000,
-      folding: (Number(settings.etafolding) || 10) * 60000,
-    };
-
-    const duration = durations[order.status];
-    if (!duration) return "";
-
-    const remaining = stageStart + duration - now;
-
-    if (remaining <= 0) return "Finishing...";
-
-    const minutes = Math.floor(remaining / 60000);
-    const seconds = Math.floor((remaining % 60000) / 1000);
-
-    return `${minutes}m ${seconds}s`;
-  }
 
   const handleTrack = async (e) => {
     if (e) e.preventDefault();
@@ -387,7 +322,7 @@ export default function LandingPage() {
       const { data: orders, error: ordErr } = await supabase
         .from("orders")
         .select(
-          "id, order_number, status, weight_kg, total_price, created_at, customer_id, customers(name), service_types(name)",
+          "id, order_number, status, weight_kg, total_price, created_at, estimated_ready_at, eta_source, customer_id, customers(name), service_types(name)",
         )
         .ilike("order_number", `%${cleaned}%`)
         .not("status", "eq", "cancelled")
@@ -419,7 +354,7 @@ export default function LandingPage() {
       supabase
         .from("orders")
         .select(
-          "id, order_number, status, weight_kg, total_price, created_at, customer_id, customers(name), service_types(name)",
+          "id, order_number, status, weight_kg, total_price, created_at, estimated_ready_at, eta_source, customer_id, customers(name), service_types(name)",
         )
         .ilike("order_number", `%${cleaned}%`)
         .not("status", "eq", "cancelled")
@@ -519,7 +454,7 @@ export default function LandingPage() {
     try {
       const data = await sendEmail({
           to: "shopjlaundry7@gmail.com",
-          subject: "New Contact Message - 4J Laundry",
+          subject: "New Contact Message - H&C Laundry",
           body: `
 Name: ${formData.name}
 Email: ${formData.email}
@@ -579,10 +514,10 @@ ${formData.message}
           <div className="landing-logo">
             <img
               src="/assets/Rectangle.png"
-              alt="I&C Laundry Hub"
+              alt="H&C Laundry"
               className="landing-logo-img-nav"
             />
-            <span>I&C Laundry Hub</span>
+            <span>H&C Laundry</span>
           </div>
           <div className="landing-nav-links">
             <a href="#home" onClick={(e) => scrollToSection(e, "home")}>
@@ -625,7 +560,7 @@ ${formData.message}
             </div>
             <h1>
               Simplify Your Life with{" "}
-              <span className="text-highlight">I&C Laundry Hub</span> Service
+              <span className="text-highlight">H&C Laundry</span> Service
             </h1>
             <p>
               A modern multi-branch laundry management platform designed to
@@ -653,7 +588,7 @@ ${formData.message}
           >
             <div className="landing-hero-image-bg" />
             <div className="landing-hero-image-ring" />
-            <img src="/assets/image%2046.png" alt="4J Laundry Service" />
+            <img src="/assets/image%2046.png" alt="H&C Laundry Service" />
             <div className="hero-float-badge hero-float-badge-1">
               <Star size={16} />
               <span>Top Rated</span>
@@ -758,7 +693,7 @@ ${formData.message}
                 <Package size={18} className="track-input-icon" />
                 <input
                   type="text"
-                  placeholder="Enter order number (e.g. 4J-20260327-1234)"
+                  placeholder="Enter order number (e.g. HC-20260327-1234)"
                   value={trackOrderId}
                   onChange={(e) => setTrackOrderId(e.target.value)}
                   required
@@ -786,13 +721,13 @@ ${formData.message}
                 .toLowerCase()
                 .trim();
 
-              const safeStatus = TRACK_STAGES.includes(normalizedStatus)
+              const safeStatus = [...TRACK_STAGES, "released"].includes(normalizedStatus)
                 ? normalizedStatus
-                : "pending";
+                : "received";
 
-              const currentIdx = TRACK_STAGES.indexOf(safeStatus);
+              const currentIdx = safeStatus === "released" ? TRACK_STAGES.length - 1 : TRACK_STAGES.indexOf(safeStatus);
 
-              const etaData = calculateETA(order);
+              const eta = order.estimated_ready_at ? new Date(order.estimated_ready_at) : null;
 
               return (
                 <div className="track-card" key={order.id}>
@@ -867,12 +802,12 @@ ${formData.message}
                     </span>
 
                     {/* ✅ ETA */}
-                    {etaData && !["ready", "released"].includes(safeStatus) && (
+                    {eta && !["ready", "released"].includes(safeStatus) && (
                       <>
                         <span>
-                          ETA:{" "}
+                          Estimated ready:{" "}
                           <strong>
-                            {etaData.eta.toLocaleString("en-PH", {
+                            {eta.toLocaleString("en-PH", {
                               month: "short",
                               day: "numeric",
                               hour: "numeric",
@@ -880,14 +815,12 @@ ${formData.message}
                             })}
                           </strong>
                         </span>
-
                         <span>
-                          Estimated time:{" "}
-                          <strong>
-                            {etaData.remainingMinutes < 60
-                              ? `${etaData.remainingMinutes} mins`
-                              : `${Math.ceil(etaData.remainingMinutes / 60)} hrs`}
-                          </strong>
+                          {order.eta_revised_at
+                            ? "Updated after a staff correction"
+                            : order.eta_source === "historical_service_branch"
+                              ? "Based on similar completed orders"
+                              : "Based on the branch default"}
                         </span>
                       </>
                     )}
@@ -931,7 +864,7 @@ ${formData.message}
                   </div>
                   <div>
                     <strong>Email</strong>
-                    <span>I&Claundry7@gmail.com</span>
+                    <span>hclaundry7@gmail.com</span>
                   </div>
                 </div>
                 <div className="landing-contact-item">
@@ -1045,11 +978,11 @@ ${formData.message}
             <div className="landing-logo">
               <img
                 src="/assets/Rectangle.png"
-                alt="I&C Laundry"
+                alt="H&C Laundry"
                 className="landing-logo-img"
               />
               <span>
-                <strong>I&C</strong> Laundry Hub
+                <strong>H&C</strong> Laundry
               </span>
             </div>
             <p>
@@ -1068,7 +1001,7 @@ ${formData.message}
               </div>
               <div className="landing-footer-contact-item">
                 <Mail size={18} />
-                <span>I&Claundry7@gmail.com</span>
+                <span>hclaundry7@gmail.com</span>
               </div>
               <div className="landing-footer-contact-item">
                 <MapPin size={18} />
@@ -1080,7 +1013,7 @@ ${formData.message}
         <div className="landing-footer-bottom">
           <div className="landing-container">
             <p>
-              Copyright &copy; {new Date().getFullYear()} I&C. All rights
+              Copyright &copy; {new Date().getFullYear()} H&C Laundry. All rights
               reserved
             </p>
           </div>

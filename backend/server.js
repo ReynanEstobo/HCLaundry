@@ -3,7 +3,7 @@ import http from 'node:http'
 import { URL } from 'node:url'
 import { authenticate, requireAdmin } from './middleware/authenticate.js'
 import { handleData } from './controllers/dataController.js'
-import { cancelOrder, createOrder, restockInventory } from './controllers/operationController.js'
+import { cancelOrder, createOrder, restockInventory, transitionOrder } from './controllers/operationController.js'
 import { listVisibleCustomers, lookupCustomer, registerCustomer } from './controllers/customerController.js'
 import { listRecycleBin, restoreRecord } from './controllers/auditController.js'
 import { login, signUp, getMe, updatePassword } from './controllers/authController.js'
@@ -57,6 +57,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && path === 'public/orders/track') return write(response, 200, await trackOrder(url.searchParams.get('q')))
     if (request.method === 'GET' && path === 'public/settings') return write(response, 200, await getPublicSettings())
     if (request.method === 'POST' && path === 'orders/create') return write(response, 200, await createOrder(await readBody(request), await authenticate(request)))
+    if (request.method === 'POST' && path === 'orders/transition') return write(response, 200, await transitionOrder(await readBody(request), await authenticate(request)))
     if (request.method === 'POST' && path === 'orders/cancel') return write(response, 200, await cancelOrder(await readBody(request), await authenticate(request)))
     if (request.method === 'POST' && path === 'inventory/restock') return write(response, 200, await restockInventory(await readBody(request), await authenticate(request)))
     if (request.method === 'GET' && path === 'customers/visible') return write(response, 200, await listVisibleCustomers(await authenticate(request)))
@@ -77,4 +78,4 @@ const server = http.createServer(async (request, response) => {
   }
 })
 
-server.listen(port, () => console.log(`4J Laundry backend listening on http://localhost:${port}`))
+server.listen(port, () => console.log(`H&C Laundry backend listening on http://localhost:${port}`))

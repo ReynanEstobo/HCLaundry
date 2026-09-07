@@ -79,17 +79,20 @@ export default function Staff() {
   // ─────────────────────────────────────
   // LOAD STAFF
   // ─────────────────────────────────────
-  const loadStaff = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
+  const loadStaff = useCallback(async (background = false) => {
+    if (!background) {
+      setLoading(true);
+      setLoadError("");
+    }
     try {
       const { data, error } = await supabase.from("staff").select("*").order("created_at", { ascending: false });
       if (error) throw error;
       setStaffList(data || []);
     } catch (error) {
-      setLoadError(error.message || "Unable to load staff records.");
+      if (!background) setLoadError(error.message || "Unable to load staff records.");
+      else console.error("Background staff refresh failed:", error);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
 
@@ -100,7 +103,7 @@ export default function Staff() {
   // ─────────────────────────────────────
   // REALTIME
   // ─────────────────────────────────────
-  useRealtime(["staff"], loadStaff);
+  useRealtime(["staff"], () => loadStaff(true));
 
   // ─────────────────────────────────────
   // OPEN NEW
@@ -274,7 +277,7 @@ export default function Staff() {
 
     setShowModal(false);
 
-    loadStaff();
+    loadStaff(true);
   }
 
   // ─────────────────────────────────────
@@ -288,7 +291,7 @@ export default function Staff() {
       if (error) throw error;
       toast.success("Staff moved to Recycle Bin");
       setStaffToDelete(null);
-      loadStaff();
+      loadStaff(true);
     } catch (error) {
       toast.error(error.message);
     } finally {

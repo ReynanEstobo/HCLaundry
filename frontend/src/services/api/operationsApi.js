@@ -8,6 +8,10 @@ export async function cancelBranchOrder(orderId, reason) {
   return apiFetch('/api/orders/cancel', { method: 'POST', body: JSON.stringify({ orderId, reason }) })
 }
 
+export async function transitionBranchOrder(orderId, status, correctionReason = '') {
+  return apiFetch('/api/orders/transition', { method: 'POST', body: JSON.stringify({ orderId, status, correctionReason }) })
+}
+
 export async function restockBranchInventory(payload) {
   return apiFetch('/api/inventory/restock', { method: 'POST', body: JSON.stringify(payload) })
 }

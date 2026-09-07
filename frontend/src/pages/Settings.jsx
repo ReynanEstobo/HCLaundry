@@ -41,9 +41,10 @@ export default function Settings() {
   const [excessKgPrice, setExcessKgPrice] = useState(30);
 
   // ETA settings
-  const [etaWash, setEtaWash] = useState(45);
-  const [etaDrying, setEtaDrying] = useState(40);
-  const [etaFolding, setEtaFolding] = useState(15);
+  const [defaultProcessingMinutes, setDefaultProcessingMinutes] = useState(100);
+  const [etaBufferMinutes, setEtaBufferMinutes] = useState(15);
+  const [etaMinCompletedOrders, setEtaMinCompletedOrders] = useState(5);
+  const [statusUndoSeconds, setStatusUndoSeconds] = useState(60);
 
   useEffect(() => {
     async function loadSettings() {
@@ -65,9 +66,10 @@ export default function Settings() {
         setAddonPrice(data.addonprice || 15);
         setExcessKgPrice(data.excesskgprice || 30);
 
-        setEtaWash(data.etawash || 45);
-        setEtaDrying(data.etadrying || 40);
-        setEtaFolding(data.etafolding || 15);
+        setDefaultProcessingMinutes(data.default_processing_minutes || ((data.etawash || 45) + (data.etadrying || 40) + (data.etafolding || 15)));
+        setEtaBufferMinutes(data.eta_buffer_minutes ?? 15);
+        setEtaMinCompletedOrders(data.eta_min_completed_orders ?? 5);
+        setStatusUndoSeconds(data.status_undo_seconds ?? 60);
       }
     }
 
@@ -85,7 +87,7 @@ export default function Settings() {
           if (data) {
             setSettings(data);
 
-            setShopName(data.shopname || "4J Laundry");
+            setShopName(data.shopname || "H&C Laundry");
             setOpenTime(data.opentime || "08:00");
             setCloseTime(data.closetime || "20:00");
             setDarkMode(data.darkmode || false);
@@ -96,9 +98,10 @@ export default function Settings() {
             setAddonPrice(data.addonprice || 15);
             setExcessKgPrice(data.excesskgprice || 30);
 
-            setEtaWash(data.etawash || 45);
-            setEtaDrying(data.etadrying || 40);
-            setEtaFolding(data.etafolding || 15);
+            setDefaultProcessingMinutes(data.default_processing_minutes || ((data.etawash || 45) + (data.etadrying || 40) + (data.etafolding || 15)));
+            setEtaBufferMinutes(data.eta_buffer_minutes ?? 15);
+            setEtaMinCompletedOrders(data.eta_min_completed_orders ?? 5);
+            setStatusUndoSeconds(data.status_undo_seconds ?? 60);
           }
         },
       )
@@ -168,9 +171,10 @@ export default function Settings() {
         bundleprice: Number(bundlePrice),
         addonprice: Number(addonPrice),
         excesskgprice: Number(excessKgPrice),
-        etawash: Number(etaWash),
-        etadrying: Number(etaDrying),
-        etafolding: Number(etaFolding),
+        default_processing_minutes: Number(defaultProcessingMinutes),
+        eta_buffer_minutes: Number(etaBufferMinutes),
+        eta_min_completed_orders: Number(etaMinCompletedOrders),
+        status_undo_seconds: Number(statusUndoSeconds),
       })
       .eq("id", settings.id);
 
@@ -457,8 +461,8 @@ export default function Settings() {
               <Timer size={20} />
             </div>
             <div>
-              <h3>Process ETA</h3>
-              <p>Estimated time for each laundry stage (in minutes)</p>
+              <h3>Order ETA</h3>
+              <p>Customer-ready estimates based on completed orders and your branch fallback.</p>
             </div>
           </div>
 
@@ -466,31 +470,47 @@ export default function Settings() {
             <div className="settings-eta-row">
               <div className="settings-eta-label">
                 <span className="settings-eta-icon">🧺</span>
-                <span>Washing</span>
+                <span>Default processing time</span>
               </div>
               <div className="settings-eta-input">
                 <input
                   className="form-control"
                   type="number"
                   min="1"
-                  value={etaWash}
-                  onChange={(e) => setEtaWash(e.target.value)}
+                  value={defaultProcessingMinutes}
+                  onChange={(e) => setDefaultProcessingMinutes(e.target.value)}
                 />
                 <span className="settings-eta-unit">min</span>
               </div>
             </div>
             <div className="settings-eta-row">
               <div className="settings-eta-label">
-                <span className="settings-eta-icon">☀️</span>
-                <span>Drying</span>
+                <span className="settings-eta-icon">↩️</span>
+                <span>Staff undo window</span>
               </div>
               <div className="settings-eta-input">
                 <input
                   className="form-control"
                   type="number"
                   min="1"
-                  value={etaDrying}
-                  onChange={(e) => setEtaDrying(e.target.value)}
+                  value={statusUndoSeconds}
+                  onChange={(e) => setStatusUndoSeconds(e.target.value)}
+                />
+                <span className="settings-eta-unit">sec</span>
+              </div>
+            </div>
+            <div className="settings-eta-row">
+              <div className="settings-eta-label">
+                <span className="settings-eta-icon">☀️</span>
+                <span>ETA safety buffer</span>
+              </div>
+              <div className="settings-eta-input">
+                <input
+                  className="form-control"
+                  type="number"
+                  min="1"
+                  value={etaBufferMinutes}
+                  onChange={(e) => setEtaBufferMinutes(e.target.value)}
                 />
                 <span className="settings-eta-unit">min</span>
               </div>
@@ -498,26 +518,26 @@ export default function Settings() {
             <div className="settings-eta-row">
               <div className="settings-eta-label">
                 <span className="settings-eta-icon">👕</span>
-                <span>Folding</span>
+                <span>Minimum completed orders for historical ETA</span>
               </div>
               <div className="settings-eta-input">
                 <input
                   className="form-control"
                   type="number"
                   min="1"
-                  value={etaFolding}
-                  onChange={(e) => setEtaFolding(e.target.value)}
+                  value={etaMinCompletedOrders}
+                  onChange={(e) => setEtaMinCompletedOrders(e.target.value)}
                 />
-                <span className="settings-eta-unit">min</span>
+                <span className="settings-eta-unit">orders</span>
               </div>
             </div>
           </div>
 
           <div className="settings-pricing-preview" style={{ marginTop: 12 }}>
             <span>
-              Total ETA:{" "}
+              Fallback estimate for new orders:{" "}
               <strong>
-                ~{Number(etaWash) + Number(etaDrying) + Number(etaFolding)} min
+                ~{Number(defaultProcessingMinutes) + Number(etaBufferMinutes)} min
               </strong>
             </span>
           </div>

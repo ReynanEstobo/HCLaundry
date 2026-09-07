@@ -1,4 +1,4 @@
--- Safe migration for the existing 4J Laundry database. Run once in Supabase SQL Editor.
+-- Safe migration for the existing H&C Laundry database. Run once in Supabase SQL Editor.
 -- It preserves all rows and does NOT drop existing operational tables.
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 

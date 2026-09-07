@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { supabase } from './supabase'
 
 /**
@@ -9,6 +9,15 @@ import { supabase } from './supabase'
  * @param {Function} onChanged - Callback invoked on any change
  */
 export function useRealtime(tables, onChanged) {
+  const refreshTimer = useRef(null)
+  const onChangedRef = useRef(onChanged)
+
+  // Keep the subscription stable while always using the current page/filter
+  // state in its refresh callback.
+  useEffect(() => {
+    onChangedRef.current = onChanged
+  }, [onChanged])
+
   useEffect(() => {
     if (!tables || tables.length === 0 || !onChanged) return
 
@@ -19,13 +28,20 @@ export function useRealtime(tables, onChanged) {
       channel = channel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table },
-        () => onChanged()
+        () => {
+          // A single action may write to multiple related rows (for example,
+          // an order, its history, and inventory usage). Wait briefly so the
+          // page performs one background refresh after the transaction settles.
+          if (refreshTimer.current) clearTimeout(refreshTimer.current)
+          refreshTimer.current = setTimeout(() => onChangedRef.current?.(), 250)
+        }
       )
     })
 
     channel.subscribe()
 
     return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
       supabase.removeChannel(channel)
     }
   }, [tables.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps

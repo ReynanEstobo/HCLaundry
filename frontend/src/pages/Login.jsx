@@ -31,11 +31,11 @@ export default function Login() {
 
         <img
           src="/assets/Rectangle.png"
-          alt="I&C Laundry Hub"
+          alt="H&C Laundry"
           className="login-left-logo"
         />
         <div className="login-left-text">
-          <h1>I&C Laundry Hub</h1>
+          <h1>H&C Laundry</h1>
           <p>
             Professional laundry services — fresh, clean, and perfectly cared
             every time.
@@ -57,11 +57,11 @@ export default function Login() {
             {/* Header */}
             <div className="login-card-header">
               <div className="login-card-icon">
-                <img src="/assets/Rectangle.png" alt="4J" />
+                <img src="/assets/Rectangle.png" alt="H&C Laundry" />
               </div>
               <div>
                 <h2>Welcome back</h2>
-                <p>Sign in to I&C Laundry Hub dashboard</p>
+                <p>Sign in to H&C Laundry dashboard</p>
               </div>
             </div>
 
@@ -82,7 +82,7 @@ export default function Login() {
                   <input
                     className="login-input"
                     type="email"
-                    placeholder="admin@4jlaundry.com"
+                    placeholder="admin@hclaundry.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -131,7 +131,7 @@ export default function Login() {
             </form>
 
             <div className="login-card-footer">
-              Powered by I&C Laundry Hub &copy; {new Date().getFullYear()}
+              Powered by H&C Laundry &copy; {new Date().getFullYear()}
             </div>
           </div>
         </div>

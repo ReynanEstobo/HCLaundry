@@ -1,4 +1,4 @@
-# 4J Laundry Management System
+# H&C Laundry Management System
 
 The React interface is separated from the Node.js API. Existing screens, routes,
 forms, styling, Supabase schema, and user flows are preserved.
