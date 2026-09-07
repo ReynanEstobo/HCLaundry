@@ -1129,16 +1129,23 @@ export default function Orders() {
                           </div>
                         </div>
                       </td>
-                      <td>
-                        {["released", "cancelled"].includes(order.status) ? (
-                          "\u2014"
+                      <td className="order-eta-cell">
+                        {['released', 'cancelled'].includes(order.status) ? (
+                          <span className="order-eta-unavailable">—</span>
                         ) : (
-                          <span style={{ color: "var(--primary-light)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                            <Clock size={14} /> {formatOrderEta(order)}
-                          </span>
+                          <div className="order-eta-content">
+                            <span className="order-eta-primary">
+                              <Clock size={15} aria-hidden="true" />
+                              {formatOrderEta(order)}
+                            </span>
+                            {(isOrderOverdue(order) || order.eta_revised_at) && (
+                              <div className="order-eta-meta">
+                                {isOrderOverdue(order) && <span className="order-eta-warning"><TriangleAlert size={13} /> Overdue</span>}
+                                {order.eta_revised_at && <span className="order-eta-revised">ETA updated</span>}
+                              </div>
+                            )}
+                          </div>
                         )}
-                        {isOrderOverdue(order) && <span className="order-eta-warning"><TriangleAlert size={13} /> Overdue</span>}
-                        {order.eta_revised_at && <span className="order-eta-revised">Revised ETA</span>}
                       </td>
                       <td>
                         <span className={`badge badge-${order.payment_status}`}>

@@ -740,16 +740,46 @@ body {
 .order-correction-dialog label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 700; }
 .order-correction-dialog textarea { resize: vertical; }
 .order-correction-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.order-eta-cell {
+  min-width: 190px;
+}
+.order-eta-content {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.order-eta-primary {
+  color: var(--primary-light);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.order-eta-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
 .order-eta-warning, .order-eta-revised, .kanban-order-alert, .kanban-order-note {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-top: 5px;
   font-size: 11px;
   font-weight: 700;
 }
+.order-eta-warning, .order-eta-revised {
+  width: fit-content;
+  padding: 3px 7px;
+  border-radius: 999px;
+}
 .order-eta-warning, .kanban-order-alert { color: #b45309; }
+.order-eta-warning { background: #fff7e7; }
 .order-eta-revised, .kanban-order-note { color: #6d28d9; }
+.order-eta-revised { background: #f3efff; }
+.order-eta-unavailable { color: var(--text-muted); }
 .status-undo-btn { color: #b45309; }
 @media (max-width: 520px) {
   .order-correction-actions { flex-direction: column-reverse; }
