@@ -1,9 +1,12 @@
 import {
   Bell,
+  CheckCircle2,
   DollarSign,
   Eye,
   EyeOff,
+  KeyRound,
   Lock,
+  MailCheck,
   Moon,
   Palette,
   Save,
@@ -15,18 +18,33 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { apiFetch } from "../services/api/client";
 
 export default function Settings() {
   const { user } = useAuth();
 
   // Password change
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [passwordOtp, setPasswordOtp] = useState("");
+  const [otpDestination, setOtpDestination] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
+  const [passwordChanged, setPasswordChanged] = useState(false);
+
+  const requestPasswordOtp = async () => {
+    setPwLoading(true);
+    try {
+      const result = await apiFetch('/api/auth/password/otp', { method: 'POST' });
+      setOtpDestination(result.destination);
+      toast.success(`Verification code sent to ${result.destination}`);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setPwLoading(false);
+    }
+  };
 
   // Business settings
   const [settings, setSettings] = useState(null);
@@ -120,38 +138,33 @@ export default function Settings() {
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      toast.error("New password must be at least 6 characters");
+    if (newPassword.length < 10) {
+      toast.error("New password must be at least 10 characters");
       return;
     }
     if (newPassword !== confirmPassword) {
       toast.error("Passwords do not match");
       return;
     }
+    if (!otpDestination || !/^\d{6}$/.test(passwordOtp)) {
+      toast.error("Send a verification code and enter its 6 digits");
+      return;
+    }
 
     setPwLoading(true);
     try {
-      // Re-authenticate with current password
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword,
-      });
-      if (signInError) {
-        toast.error("Current password is incorrect");
-        setPwLoading(false);
-        return;
-      }
-
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
+        otp: passwordOtp,
       });
       if (error) {
         toast.error(error.message);
       } else {
-        toast.success("Password updated successfully");
-        setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
+        setPasswordOtp("");
+        setOtpDestination("");
+        setPasswordChanged(true);
       }
     } catch (err) {
       toast.error("Failed to update password");
@@ -209,7 +222,7 @@ export default function Settings() {
             </div>
             <div>
               <h3>Account Security</h3>
-              <p>Manage your password and security settings</p>
+              <p>Change your password with a secure email verification code</p>
             </div>
           </div>
 
@@ -222,26 +235,15 @@ export default function Settings() {
 
           <h4 className="settings-subtitle">Change Password</h4>
           <form onSubmit={handlePasswordChange}>
+            <button type="button" className="btn btn-secondary" onClick={requestPasswordOtp} disabled={pwLoading} style={{ width: '100%', marginBottom: 14 }}>
+              <MailCheck size={16} /> {otpDestination ? 'Resend verification code' : 'Send verification code'}
+            </button>
+            {otpDestination && <div className="account-security-notice" style={{ marginBottom: 14 }}><MailCheck size={16} /><span>Code sent to <strong>{otpDestination}</strong>. It expires in 10 minutes.</span></div>}
             <div className="form-group">
-              <label>Current Password</label>
+              <label>Email Verification Code</label>
               <div className="settings-input-wrapper">
-                <Lock size={16} className="settings-input-icon" />
-                <input
-                  className="form-control"
-                  type={showCurrent ? "text" : "password"}
-                  placeholder="Enter current password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  required
-                  style={{ paddingLeft: 38, paddingRight: 38 }}
-                />
-                <button
-                  type="button"
-                  className="settings-eye-btn"
-                  onClick={() => setShowCurrent(!showCurrent)}
-                >
-                  {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+                <KeyRound size={16} className="settings-input-icon" />
+                <input className="form-control" inputMode="numeric" maxLength={6} disabled={!otpDestination} value={passwordOtp} onChange={(e) => setPasswordOtp(e.target.value.replace(/\D/g, ''))} placeholder="6-digit code" required style={{ paddingLeft: 38, textAlign: 'center', letterSpacing: 5, fontWeight: 700 }} />
               </div>
             </div>
             <div className="form-row">
@@ -252,7 +254,7 @@ export default function Settings() {
                   <input
                     className="form-control"
                     type={showNew ? "text" : "password"}
-                    placeholder="Min 6 characters"
+                    placeholder="At least 10 characters"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     required
@@ -551,6 +553,15 @@ export default function Settings() {
           </button>
         </div>
       </div>
+      {passwordChanged && <div className="modal-overlay account-security-success-overlay" role="presentation">
+        <section className="account-security-success-dialog" role="alertdialog" aria-modal="true" aria-labelledby="admin-password-success-title">
+          <span className="account-security-success-icon"><CheckCircle2 size={32} /></span>
+          <h3 id="admin-password-success-title">Password changed successfully</h3>
+          <p>Your administrator password was updated and a fresh secure session is active.</p>
+          <div className="account-security-success-note">Keep your password and verification code private. Do not share them with anyone.</div>
+          <button className="account-security-submit" onClick={() => setPasswordChanged(false)}>Continue</button>
+        </section>
+      </div>}
     </div>
   );
 }

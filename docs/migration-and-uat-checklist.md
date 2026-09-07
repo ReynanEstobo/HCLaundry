@@ -13,7 +13,9 @@ Run each file once in Supabase SQL Editor, in this order. Stop if a script repor
 7. `supabase_migrations/20260908_three_stage_order_eta.sql`
 8. `supabase_migrations/20260908_order_stage_corrections.sql`
 9. `supabase_migrations/20260908_rebrand_hc_laundry.sql`
-10. `supabase_migrations/20260907_verify_multi_branch_setup.sql` (read-only verification)
+10. `supabase_migrations/20260908_staff_account_provisioning.sql`
+11. `supabase_migrations/20260908_password_change_verification.sql`
+12. `supabase_migrations/20260907_verify_multi_branch_setup.sql` (read-only verification)
 
 The final query's `data_issue` counts should be zero before production sign-off, except intentionally unassigned historical records that an administrator has reviewed.
 

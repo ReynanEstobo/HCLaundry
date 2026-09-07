@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { AlertCircle, ArrowLeft, Eye, EyeOff, Lock, UserRound } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 export default function Login() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -16,7 +16,7 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const { error: err } = await signIn(email, password);
+    const { error: err } = await signIn(identifier, password);
     if (err) setError(err.message);
     setLoading(false);
   };
@@ -74,17 +74,17 @@ export default function Login() {
             )}
 
             <form onSubmit={handleSubmit} className="login-form">
-              {/* Email */}
+              {/* Staff identifier */}
               <div className="login-field">
-                <label>Email Address</label>
+                <label>Staff ID or Username</label>
                 <div className="login-input-wrap">
-                  <Mail size={15} className="login-input-icon" />
+                  <UserRound size={15} className="login-input-icon" />
                   <input
                     className="login-input"
-                    type="email"
-                    placeholder="admin@hclaundry.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    type="text"
+                    placeholder="e.g. maria.santos"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     required
                   />
                 </div>
@@ -128,6 +128,10 @@ export default function Login() {
                   "Sign In"
                 )}
               </button>
+
+              <div className="login-card-footer" style={{ marginTop: 16 }}>
+                <button type="button" className="login-forgot-password" onClick={() => navigate('/forgot-password')}>Forgot password?</button>
+              </div>
             </form>
 
             <div className="login-card-footer">

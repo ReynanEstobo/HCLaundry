@@ -133,6 +133,9 @@ export async function execute(table, request, identity) {
   if (table === 'settings' && request.operation !== 'select' && identity.role !== 'admin') {
     throw Object.assign(new Error('Only administrators can change business settings.'), { status: 403 })
   }
+  if (table === 'staff' && ['insert', 'update'].includes(request.operation)) {
+    throw Object.assign(new Error('Staff accounts can only be created or changed through the secure staff-provisioning workflow.'), { status: 403 })
+  }
   if (SOFT_DELETABLE_TABLES.has(table) && ['insert', 'update'].includes(request.operation)) {
     const entries = Array.isArray(request.payload) ? request.payload : [request.payload || {}]
     if (entries.some(entry => Object.hasOwn(entry, 'deleted_at') || Object.hasOwn(entry, 'deleted_by_staff_id'))) {
@@ -204,7 +207,7 @@ export async function execute(table, request, identity) {
 }
 
 export async function getStaffProfile(authId, email) {
-  const selection = 'id, role, full_name, branch, branch_id'
+  const selection = 'id, role, full_name, branch, branch_id, must_change_password'
   const profile = await database.from('staff').select(selection).eq('auth_id', authId).is('deleted_at', null).maybeSingle()
   if (profile.data || profile.error || !email) return profile
 

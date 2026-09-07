@@ -1,0 +1,67 @@
+import { Eye, EyeOff, LockKeyhole, ShieldCheck } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import { supabase } from '../lib/supabase'
+
+export default function ActivatePassword() {
+  const navigate = useNavigate()
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmation, setShowConfirmation] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  async function submit(event) {
+    event.preventDefault()
+    if (password.length < 10) return toast.error('Use at least 10 characters for your new password.')
+    if (password !== confirmPassword) return toast.error('Passwords do not match.')
+    setSaving(true)
+    const { error } = await supabase.auth.updateUser({ password })
+    setSaving(false)
+    if (error) return toast.error(error.message)
+    toast.success('Password created. Your account is now active.')
+    navigate('/dashboard', { replace: true })
+  }
+
+  return (
+    <main className="login-page-wrapper">
+      <section className="login-right-panel" style={{ width: '100%', minHeight: '100vh' }}>
+        <div className="login-form-wrapper">
+          <div className="login-card-enhanced">
+            <div className="login-card-header">
+              <div className="login-card-icon"><ShieldCheck size={24} /></div>
+              <div>
+                <h2>Activate your staff account</h2>
+                <p>Create a private password before accessing H&C Laundry.</p>
+              </div>
+            </div>
+            <form onSubmit={submit} className="login-form">
+              <div className="login-field">
+                <label>New password</label>
+                <div className="login-input-wrap">
+                  <LockKeyhole size={15} className="login-input-icon" />
+                  <input className="login-input login-input-password" type={showPassword ? 'text' : 'password'} value={password} onChange={event => setPassword(event.target.value)} autoComplete="new-password" required />
+                  <button type="button" className="login-eye-btn" onClick={() => setShowPassword(visible => !visible)} aria-label={showPassword ? 'Hide new password' : 'Show new password'}>
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+              <div className="login-field">
+                <label>Confirm new password</label>
+                <div className="login-input-wrap">
+                  <LockKeyhole size={15} className="login-input-icon" />
+                  <input className="login-input login-input-password" type={showConfirmation ? 'text' : 'password'} value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} autoComplete="new-password" required />
+                  <button type="button" className="login-eye-btn" onClick={() => setShowConfirmation(visible => !visible)} aria-label={showConfirmation ? 'Hide confirmation password' : 'Show confirmation password'}>
+                    {showConfirmation ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+              <button type="submit" disabled={saving} className="login-submit-btn">{saving ? 'Activating…' : 'Activate account'}</button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+  )
+}

@@ -9,6 +9,7 @@ import {
   PanelLeftClose,
   Settings,
   ArchiveRestore,
+  KeyRound,
   MapPin,
   ShoppingBag,
   UserCog,
@@ -23,6 +24,7 @@ const navigation = [
   { name: "Garment", path: "/dashboard/orders", icon: ShoppingBag },
   { name: "Client", path: "/dashboard/customers", icon: Users },
   { name: "Inventory", path: "/dashboard/inventory", icon: Package },
+  { name: "Account Security", path: "/dashboard/change-password", icon: KeyRound, staffOnly: true },
   {
     name: "Analytics",
     path: "/dashboard/analytics",
@@ -55,10 +57,11 @@ const pageNames = {
   "/dashboard/staff": "Staff",
   "/dashboard/settings": "Settings",
   "/dashboard/recycle-bin": "Recycle Bin",
+  "/dashboard/change-password": "Account Security",
 };
 
 export default function Layout() {
-  const { signOut, user, role, staffName, branch } = useAuth();
+  const { signOut, user, role, staffName, branch, contactEmail } = useAuth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -80,6 +83,10 @@ export default function Layout() {
     setMobileOpen(false);
   }, [location.pathname]);
 
+  // A collapsed desktop preference must not hide the contents of the mobile
+  // drawer. The drawer is a full navigation surface, not the icon rail.
+  const sidebarExpanded = !collapsed || mobileOpen;
+
   return (
     <div className={`app-layout ${collapsed ? "sidebar-collapsed" : ""}`}>
       {/* Mobile overlay */}
@@ -96,7 +103,7 @@ export default function Layout() {
               style={{ width: 52, height: 52, objectFit: "contain" }}
             />
           </div>
-          {!collapsed && (
+          {sidebarExpanded && (
             <div>
               <h1>H&C Laundry</h1>
               <span>Management System</span>
@@ -105,9 +112,9 @@ export default function Layout() {
         </div>
 
         <nav className="sidebar-nav">
-          {!collapsed && <div className="sidebar-section-label">Main Menu</div>}
+          {sidebarExpanded && <div className="sidebar-section-label">Main Menu</div>}
           {navigation
-            .filter((item) => !item.adminOnly || role === "admin")
+            .filter((item) => (!item.adminOnly || role === "admin") && (!item.staffOnly || role !== "admin"))
             .map((item) => (
               <NavLink
                 key={item.path}
@@ -116,10 +123,10 @@ export default function Layout() {
                 className={({ isActive }) =>
                   `nav-link ${isActive ? "active" : ""}`
                 }
-                title={collapsed ? item.name : undefined}
+                title={!sidebarExpanded ? item.name : undefined}
               >
                 <item.icon size={19} />
-                {!collapsed && item.name}
+                {sidebarExpanded && item.name}
               </NavLink>
             ))}
         </nav>
@@ -129,10 +136,10 @@ export default function Layout() {
             className="nav-link"
             onClick={signOut}
             style={{ color: "#ff6b6b", fontSize: 13 }}
-            title={collapsed ? "Sign Out" : undefined}
+            title={!sidebarExpanded ? "Sign Out" : undefined}
           >
             <LogOut size={18} />
-            {!collapsed && "Sign Out"}
+            {sidebarExpanded && "Sign Out"}
           </button>
 
           {/* Collapse toggle - desktop only */}
@@ -184,7 +191,7 @@ export default function Layout() {
                 <span className="top-bar-user-name">
                   {staffName || (role === "admin" ? "Admin" : "Staff")}
                 </span>
-                <span className="top-bar-user-email">{user?.email}</span>
+                <span className="top-bar-user-email">{contactEmail || (user?.email?.endsWith('@accounts.hclaundry.local') ? 'Staff account' : user?.email)}</span>
                 {role !== "admin" && branch && (
                   <span className="top-bar-user-branch" title={`Assigned branch: ${branch}`}>
                     <MapPin size={11} aria-hidden="true" />

@@ -48,10 +48,11 @@ export const supabase = {
   auth: {
     async getSession() { return { data: { session: getStoredSession() } } },
     onAuthStateChange(callback) { authListeners.add(callback); return { data: { subscription: { unsubscribe: () => authListeners.delete(callback) } } } },
-    async signInWithPassword({ email, password }) {
+    async signInWithPassword({ identifier, email, password }) {
       try {
-        const data = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+        const data = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ identifier: identifier || email, password }) })
         reauthenticationPassword = password
+        data.session.hc_must_change_password = Boolean(data.mustChangePassword)
         storeSession(data.session)
         emitAuthChange(data.session)
         return { data: { user: data.user, session: data.session }, error: null }
@@ -64,10 +65,18 @@ export const supabase = {
       } catch (error) { return { data: { user: null, session: null }, error: { message: error.message } } }
     },
     async signOut() { clearSession(); reauthenticationPassword = null; emitAuthChange(null); return { error: null } },
-    async updateUser({ password }) {
+    async updateUser({ password, currentPassword, otp }) {
       try {
         const session = getStoredSession()
-        await apiFetch('/api/auth/password', { method: 'PATCH', body: JSON.stringify({ email: session?.user?.email, currentPassword: reauthenticationPassword, newPassword: password }) })
+        await apiFetch('/api/auth/password', { method: 'PATCH', body: JSON.stringify({ currentPassword: currentPassword || reauthenticationPassword, newPassword: password, otp }) })
+        // Changing a password invalidates the prior JWT in some Supabase
+        // configurations. Sign in again right away so the app stores a new,
+        // valid session before leaving the activation/security screen.
+        const refreshed = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ identifier: session?.user?.email, password }) })
+        refreshed.session.hc_must_change_password = Boolean(refreshed.mustChangePassword)
+        storeSession(refreshed.session)
+        emitAuthChange(refreshed.session)
+        reauthenticationPassword = password
         return { error: null }
       } catch (error) { return { error: { message: error.message } } }
     },

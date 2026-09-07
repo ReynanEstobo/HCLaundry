@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useRealtime } from '../lib/useRealtime'
+import { useAuth } from '../context/AuthContext'
 import { PageError, PageLoader } from '../components/AsyncState'
 import { compareOrdersForList } from '../utils/orderListPriority'
 import {
-  Clock, AlertTriangle, ShoppingBag, CheckCircle2, Timer, User, RefreshCw, Package
+  Clock, AlertTriangle, ShoppingBag, CheckCircle2, Timer, User, RefreshCw,
+  Brain, Zap, TrendingUp
 } from 'lucide-react'
 
 const STATUS_FLOW = ['received', 'on_process', 'ready']
@@ -19,8 +21,47 @@ const STATUS_ICONS = {
   ready: '✅',
 }
 
+function buildBranchForecast(orderHistory, lowStockItems) {
+  const now = new Date()
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const recordedOrders = orderHistory.filter(order => order.created_at)
+  const oldest = recordedOrders.length
+    ? new Date(Math.min(...recordedOrders.map(order => new Date(order.created_at).getTime())))
+    : now
+  const daysOfData = Math.max(Math.ceil((now - oldest) / 86400000), 1)
+  const averageDailyOrders = recordedOrders.length / daysOfData
+  const paidRevenue = recordedOrders
+    .filter(order => order.payment_status === 'paid')
+    .reduce((sum, order) => sum + Number(order.total_price || 0), 0)
+  const nextMonthRevenue = Math.round((paidRevenue / daysOfData) * 30)
+
+  const byDay = Array(7).fill(0)
+  recordedOrders.forEach(order => { byDay[new Date(order.created_at).getDay()] += 1 })
+  const peakIndex = byDay.indexOf(Math.max(...byDay))
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const expectedOrders = byDay[tomorrow.getDay()] / Math.max(Math.ceil(daysOfData / 7), 1)
+  const workloadPct = averageDailyOrders > 0
+    ? Math.min(Math.round((expectedOrders / averageDailyOrders) * 100), 100)
+    : 0
+  const workloadLevel = workloadPct >= 80 ? 'High demand'
+    : workloadPct >= 50 ? 'Moderate'
+      : workloadPct >= 20 ? 'Normal'
+        : 'Low'
+
+  return {
+    workloadLevel,
+    workloadPct,
+    peakDay: recordedOrders.length ? dayNames[peakIndex] : 'Not enough data',
+    nextMonthRevenue,
+    restockItem: lowStockItems[0] || null,
+  }
+}
+
 export default function StaffDashboard() {
+  const { branch } = useAuth()
   const [orders, setOrders] = useState([])
+  const [orderHistory, setOrderHistory] = useState([])
   const [inventory, setInventory] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -31,15 +72,21 @@ export default function StaffDashboard() {
       setLoadError('')
     }
     try {
-      const [ordersRes, inventoryRes] = await Promise.all([
+      const [ordersRes, inventoryRes, historyRes] = await Promise.all([
         supabase.from('orders').select('*, customers(name, phone), service_types(name)')
           .not('status', 'in', '("released","cancelled")')
           .order('created_at', { ascending: false }),
-        supabase.from('inventory_items').select('*, inventory_categories(name)')
+        supabase.from('inventory_items').select('*, inventory_categories(name)'),
+        // Row-level security restricts this data to the signed-in staff member's branch.
+        supabase.from('orders').select('created_at, total_price, payment_status, status')
+          .not('status', 'eq', 'cancelled')
       ])
-      if (ordersRes.error || inventoryRes.error) throw ordersRes.error || inventoryRes.error
+      if (ordersRes.error || inventoryRes.error || historyRes.error) {
+        throw ordersRes.error || inventoryRes.error || historyRes.error
+      }
       setOrders([...(ordersRes.data || [])].sort(compareOrdersForList))
       setInventory(inventoryRes.data || [])
+      setOrderHistory(historyRes.data || [])
     } catch (error) {
       if (!background) setLoadError(error.message || 'Unable to load your branch dashboard.')
       else console.error('Background staff dashboard refresh failed:', error)
@@ -72,14 +119,27 @@ export default function StaffDashboard() {
 
   // Low stock
   const lowStockItems = inventory.filter(i => Number(i.current_stock) <= Number(i.minimum_stock))
+  const branchForecast = buildBranchForecast(orderHistory, lowStockItems)
 
   if (loading) return <PageLoader label="Loading branch dashboard…" />
   if (loadError) return <PageError message={loadError} onRetry={loadData} />
 
   return (
-    <>
-      {/* Stats Row */}
-      <div className="stats-grid" style={{ marginBottom: 20 }}>
+    <section className="staff-dashboard">
+      <div className="staff-dashboard-heading">
+        <div>
+          <p className="staff-dashboard-kicker">Branch operations</p>
+          <h2>Today’s work queue</h2>
+          <p>Monitor the orders and inventory assigned to {branch || 'your branch'}.</p>
+        </div>
+        <button className="btn btn-sm btn-secondary staff-dashboard-refresh" onClick={() => loadData()}>
+          <RefreshCw size={14} /> Refresh data
+        </button>
+      </div>
+
+      <div className="staff-dashboard-summary">
+        {/* Stats Row */}
+        <div className="stats-grid staff-dashboard-stats">
         <div className="stat-card blue">
           <div className="stat-icon"><ShoppingBag size={22} /></div>
           <div className="stat-value">{activeCount}</div>
@@ -100,46 +160,55 @@ export default function StaffDashboard() {
           <div className="stat-value">{lowStockItems.length}</div>
           <div className="stat-label">Low Stock Items</div>
         </div>
-      </div>
-
-      {/* Inventory Alerts */}
-      {lowStockItems.length > 0 && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-header">
-            <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Package size={18} style={{ color: '#f59e0b' }} />
-              Inventory Alerts
-            </h3>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {lowStockItems.slice(0, 4).map((item, i) => {
-              const isOut = Number(item.current_stock) === 0
-              return (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '10px 14px', borderRadius: 10,
-                  background: isOut ? '#fef2f2' : '#fffbeb',
-                  border: `1px solid ${isOut ? '#fecaca' : '#fde68a'}`,
-                }}>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 8,
-                    background: '#fff', border: `1px solid ${isOut ? '#fecaca' : '#fde68a'}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}>
-                    <AlertTriangle size={16} style={{ color: isOut ? '#dc2626' : '#d97706' }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13, color: isOut ? '#991b1b' : '#92400e' }}>{item.name}</span>
-                    <span style={{ fontSize: 12, color: '#6b7280', marginLeft: 8 }}>
-                      {isOut ? 'Out of stock!' : `${item.current_stock} ${item.unit} left`}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
         </div>
-      )}
+
+        <aside className="staff-dss-overview" aria-label="Branch decision support overview">
+          <div className="staff-dss-header">
+            <div>
+              <span className="staff-dss-eyebrow"><Brain size={15} /> DSS overview</span>
+              <h3>Decision Support</h3>
+              <p>Read-only forecast for {branch || 'your branch'}.</p>
+            </div>
+            <span className="staff-dss-badge"><Zap size={12} /> AI-assisted</span>
+          </div>
+
+          <div className="staff-dss-metrics">
+            <div className="staff-dss-metric workload">
+              <span>Expected workload</span>
+              <strong>{branchForecast.workloadLevel}</strong>
+              <small>{branchForecast.workloadPct}% of usual demand</small>
+            </div>
+            <div className="staff-dss-metric peak">
+              <span>Likely peak day</span>
+              <strong>{branchForecast.peakDay}</strong>
+              <small>Plan your shift ahead</small>
+            </div>
+          </div>
+
+          <div className="staff-dss-revenue">
+            <span className="staff-dss-icon"><TrendingUp size={19} /></span>
+            <div>
+              <span>Predicted revenue</span>
+              <strong>₱{branchForecast.nextMonthRevenue.toLocaleString()}</strong>
+              <small>Estimated for the next month</small>
+            </div>
+          </div>
+
+          {branchForecast.restockItem ? (
+            <div className="staff-dss-alert">
+              <AlertTriangle size={18} />
+              <div>
+                <strong>{branchForecast.restockItem.name} needs attention</strong>
+                <span>{Number(branchForecast.restockItem.current_stock)} {branchForecast.restockItem.unit} remaining; at or below the minimum level.</span>
+              </div>
+            </div>
+          ) : (
+            <div className="staff-dss-ok">
+              <CheckCircle2 size={17} /> No low-stock items reported for your branch.
+            </div>
+          )}
+        </aside>
+      </div>
 
       {/* Kanban Board — same as admin Garment page */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -200,6 +269,6 @@ export default function StaffDashboard() {
           )
         })}
       </div>
-    </>
+    </section>
   )
 }

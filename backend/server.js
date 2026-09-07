@@ -6,7 +6,8 @@ import { handleData } from './controllers/dataController.js'
 import { cancelOrder, createOrder, restockInventory, transitionOrder } from './controllers/operationController.js'
 import { listVisibleCustomers, lookupCustomer, registerCustomer } from './controllers/customerController.js'
 import { listRecycleBin, restoreRecord } from './controllers/auditController.js'
-import { login, signUp, getMe, updatePassword } from './controllers/authController.js'
+import { login, signUp, getMe, requestForgotPasswordOtp, requestPasswordOtp, resetForgottenPassword, updatePassword } from './controllers/authController.js'
+import { provisionStaff, resetStaffCredentials, updateProvisionedStaff } from './controllers/staffProvisionController.js'
 import { getPublicSettings, trackOrder } from './controllers/publicController.js'
 import { sendEmail, sendSms } from './services/notificationService.js'
 import { askGemini, generateForecast, generateDecisionSupport } from './services/aiService.js'
@@ -46,9 +47,15 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/api/health') return write(response, 200, { status: 'ok' })
     if (request.method === 'GET' && url.pathname === '/api/events') return streamEvents(request, response)
     if (request.method === 'POST' && path === 'auth/login') return write(response, 200, await login(await readBody(request)))
+    if (request.method === 'POST' && path === 'auth/forgot-password/otp') return write(response, 200, await requestForgotPasswordOtp(await readBody(request)))
+    if (request.method === 'PATCH' && path === 'auth/forgot-password') return write(response, 200, await resetForgottenPassword(await readBody(request)))
     if (request.method === 'POST' && path === 'auth/signup') { requireAdmin(await authenticate(request)); return write(response, 200, await signUp(await readBody(request))) }
     if (request.method === 'GET' && path === 'auth/me') return write(response, 200, await getMe(await authenticate(request)))
-    if (request.method === 'PATCH' && path === 'auth/password') return write(response, 200, await updatePassword(await readBody(request)))
+    if (request.method === 'POST' && path === 'auth/password/otp') return write(response, 200, await requestPasswordOtp(await readBody(request), await authenticate(request)))
+    if (request.method === 'PATCH' && path === 'auth/password') return write(response, 200, await updatePassword(await readBody(request), await authenticate(request)))
+    if (request.method === 'POST' && path === 'staff/provision') { const identity = await authenticate(request); requireAdmin(identity); return write(response, 200, await provisionStaff(await readBody(request), identity)) }
+    if (request.method === 'POST' && path === 'staff/reset-credentials') { const identity = await authenticate(request); requireAdmin(identity); return write(response, 200, await resetStaffCredentials(await readBody(request), identity)) }
+    if (request.method === 'POST' && path === 'staff/update') { const identity = await authenticate(request); requireAdmin(identity); return write(response, 200, await updateProvisionedStaff(await readBody(request), identity)) }
     if (request.method === 'POST' && path === 'notifications/email') { await authenticate(request); return write(response, 200, await sendEmail(await readBody(request))) }
     if (request.method === 'POST' && path === 'notifications/sms') { await authenticate(request); return write(response, 200, await sendSms(await readBody(request))) }
     if (request.method === 'POST' && path === 'ai/generate') { await authenticate(request); return write(response, 200, await askGemini((await readBody(request)).prompt)) }

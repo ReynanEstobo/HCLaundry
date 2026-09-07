@@ -1,11 +1,12 @@
 import { format } from "date-fns";
-import { Edit2, Eye, EyeOff, Plus, Search, Trash2, X } from "lucide-react";
+import { Edit2, Eye, EyeOff, KeyRound, Plus, Search, Trash2, X } from "lucide-react";
 
 import { useCallback, useEffect, useState } from "react";
 
 import toast from "react-hot-toast";
 
 import { supabase } from "../lib/supabase";
+import { apiFetch } from "../services/api/client";
 import { useRealtime } from "../lib/useRealtime";
 import { PageError, PageLoader } from "../components/AsyncState";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -65,6 +66,9 @@ export default function Staff() {
   const [saving, setSaving] = useState(false);
   const [staffToDelete, setStaffToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [staffToReset, setStaffToReset] = useState(null);
+  const [resettingCredentials, setResettingCredentials] = useState(false);
+  const [issuedCredentials, setIssuedCredentials] = useState(null);
 
   const [form, setForm] = useState({
     full_name: "",
@@ -135,7 +139,7 @@ export default function Staff() {
     setForm({
       full_name: staff.full_name,
       phone: staff.phone || "",
-      email: staff.email || "",
+      email: staff.contact_email || "",
       role: staff.role || "staff",
       branch: staff.branch || "Main - Brgy 7",
       position: staff.position || "",
@@ -157,43 +161,32 @@ export default function Staff() {
       return toast.error("Full name is required");
     }
 
-    if (!form.email.trim()) {
-      return toast.error("Email is required");
-    }
-
     setSaving(true);
 
     // ─────────────────────────────────
     // UPDATE STAFF
     // ─────────────────────────────────
     if (editing) {
-      const updates = {
-        full_name: form.full_name,
-
-        phone: form.phone,
-
-        email: form.email,
-
-        role: form.role,
-
-        branch: form.branch,
-
-        position: form.position,
-      };
-
-      const { error } = await supabase
-        .from("staff")
-        .update(updates)
-        .eq("id", editing.id);
-
-      if (error) {
+      try {
+        await apiFetch("/api/staff/update", {
+          method: "POST",
+          body: JSON.stringify({
+            staffId: editing.id,
+            full_name: form.full_name,
+            phone: form.phone,
+            contact_email: form.email,
+            role: form.role,
+            branch: form.branch,
+            position: form.position,
+          }),
+        });
+      } catch (error) {
         setSaving(false);
-
-        return toast.error(error.message);
+        return toast.error(error.message || "Unable to update staff.");
       }
 
       // PASSWORD UPDATE
-      if (form.password && form.password.length >= 6 && editing.auth_id) {
+      if (false && form.password && form.password.length >= 6 && editing.auth_id) {
         const { error: pwErr } = await supabase.functions.invoke(
           "update-staff-password",
           {
@@ -218,59 +211,23 @@ export default function Staff() {
     // CREATE STAFF
     // ─────────────────────────────────
     else {
-      if (!form.password || form.password.length < 6) {
-        setSaving(false);
-
-        return toast.error("Password must be at least 6 characters");
-      }
-
-      // CREATE AUTH USER
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: form.email,
-
-        password: form.password,
-
-        options: {
-          data: {
+      try {
+        const result = await apiFetch("/api/staff/provision", {
+          method: "POST",
+          body: JSON.stringify({
             full_name: form.full_name,
-
-            role: form.role,
-
+            phone: form.phone,
+            contact_email: form.email,
             branch: form.branch,
-          },
-        },
-      });
-
-      if (authError) {
+            position: form.position,
+          }),
+        });
+        setIssuedCredentials(result.credentials);
+        toast.success("Staff account provisioned. Save the credentials now.");
+      } catch (error) {
         setSaving(false);
-
-        return toast.error(authError.message);
+        return toast.error(error.message || "Unable to provision the staff account.");
       }
-
-      // INSERT STAFF RECORD
-      const { error } = await supabase.from("staff").insert({
-        auth_id: authData.user?.id || null,
-
-        full_name: form.full_name,
-
-        phone: form.phone,
-
-        email: form.email,
-
-        role: form.role,
-
-        branch: form.branch,
-
-        position: form.position,
-      });
-
-      if (error) {
-        setSaving(false);
-
-        return toast.error(error.message);
-      }
-
-      toast.success("Staff account created!");
     }
 
     setSaving(false);
@@ -296,6 +253,25 @@ export default function Staff() {
       toast.error(error.message);
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function resetCredentials() {
+    if (!staffToReset || resettingCredentials) return;
+    setResettingCredentials(true);
+    try {
+      const result = await apiFetch("/api/staff/reset-credentials", {
+        method: "POST",
+        body: JSON.stringify({ staffId: staffToReset.id }),
+      });
+      setStaffToReset(null);
+      setIssuedCredentials(result.credentials);
+      toast.success("New temporary credentials created.");
+      loadStaff(true);
+    } catch (error) {
+      toast.error(error.message || "Unable to reset credentials.");
+    } finally {
+      setResettingCredentials(false);
     }
   }
 
@@ -359,7 +335,8 @@ export default function Staff() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Email</th>
+                <th>Staff ID / Username</th>
+                <th>Contact Email</th>
                 <th>Phone</th>
                 <th>Position</th>
                 <th>Branch</th>
@@ -372,7 +349,7 @@ export default function Staff() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="empty-state">
+                  <td colSpan={9} className="empty-state">
                     <p>No staff found</p>
                   </td>
                 </tr>
@@ -429,8 +406,16 @@ export default function Staff() {
                       </div>
                     </td>
 
-                    {/* EMAIL */}
-                    <td>{s.email || "—"}</td>
+                    <td>
+                      <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                        <strong>{s.staff_code || "—"}</strong><br />
+                        <span style={{ color: "var(--text-muted)" }}>{s.username || "Legacy account"}</span>
+                      </div>
+                    </td>
+
+                    {/* CONTACT EMAIL — the auth email for provisioned accounts
+                        is intentionally internal and must not be shown here. */}
+                    <td>{s.contact_email || (s.username ? "No contact email" : s.email || "—")}</td>
 
                     {/* PHONE */}
                     <td>{s.phone || "—"}</td>
@@ -485,6 +470,16 @@ export default function Staff() {
                         >
                           <Edit2 size={16} />
                         </button>
+
+                        {s.auth_id && (
+                          <button
+                            className="btn-icon"
+                            onClick={() => setStaffToReset(s)}
+                            title="Reset generated credentials"
+                          >
+                            <KeyRound size={16} />
+                          </button>
+                        )}
 
                         {/* DELETE */}
                         <button
@@ -566,7 +561,7 @@ export default function Staff() {
                 {/* EMAIL */}
                 <div className="form-group">
                   <label>
-                    Email *{" "}
+                    Contact email{" "}
                     <span
                       style={{
                         fontSize: 11,
@@ -574,14 +569,14 @@ export default function Staff() {
                         color: "var(--text-muted)",
                       }}
                     >
-                      (used for login)
+                      (optional; not used for login)
                     </span>
                   </label>
 
                   <input
                     className="form-control"
                     type="email"
-                    placeholder="staff@iclaundry.com"
+                    placeholder="staff@example.com"
                     value={form.email}
                     onChange={(e) =>
                       setForm((f) => ({
@@ -590,8 +585,6 @@ export default function Staff() {
                         email: e.target.value,
                       }))
                     }
-                    required
-                    disabled={!!editing}
                   />
                 </div>
 
@@ -646,6 +639,7 @@ export default function Staff() {
                   <select
                     className="form-control"
                     value={form.role}
+                    disabled={!editing}
                     onChange={(e) =>
                       setForm((f) => ({
                         ...f,
@@ -662,8 +656,8 @@ export default function Staff() {
                   </select>
                 </div>
 
-                {/* PASSWORD */}
-                <div className="form-group">
+                {/* Passwords are generated and reset only through the provisioning workflow. */}
+                {false && <div className="form-group">
                   <label>
                     {editing ? "New Password" : "Password *"}{" "}
                     <span
@@ -733,7 +727,7 @@ export default function Staff() {
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* FOOTER */}
@@ -762,6 +756,41 @@ export default function Staff() {
           </div>
         </div>
       )}
+      {issuedCredentials && (
+        <div className="modal-overlay" onClick={() => setIssuedCredentials(null)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h3>Staff credentials created</h3>
+              <button className="btn-icon" onClick={() => setIssuedCredentials(null)}><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginTop: 0, color: "var(--text-muted)", lineHeight: 1.55 }}>
+                Give these credentials to the staff member securely. The temporary password is shown only now and must be changed at first sign-in.
+              </p>
+              <div className="card" style={{ padding: 16, background: "var(--bg-body)" }}>
+                <p><strong>Staff ID:</strong> {issuedCredentials.staffCode}</p>
+                <p><strong>Username:</strong> {issuedCredentials.username}</p>
+                <p><strong>Temporary password:</strong> <code style={{ fontSize: 15, userSelect: "all" }}>{issuedCredentials.temporaryPassword}</code></p>
+                <p style={{ marginBottom: 0 }}><strong>Assigned branch:</strong> {issuedCredentials.branch}</p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => navigator.clipboard?.writeText(`H&C Laundry\nStaff ID: ${issuedCredentials.staffCode}\nUsername: ${issuedCredentials.username}\nTemporary password: ${issuedCredentials.temporaryPassword}\nBranch: ${issuedCredentials.branch}`).then(() => toast.success("Credentials copied."))}>Copy credentials</button>
+              <button className="btn btn-primary" onClick={() => setIssuedCredentials(null)}>I saved them</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <ConfirmDialog
+        open={Boolean(staffToReset)}
+        title="Generate new staff credentials?"
+        message={<>The current password for <strong>{staffToReset?.full_name}</strong> will stop working. The new temporary password will be shown once and must be changed on first sign-in.</>}
+        confirmLabel="Generate credentials"
+        cancelLabel="Cancel"
+        loading={resettingCredentials}
+        onConfirm={resetCredentials}
+        onClose={() => setStaffToReset(null)}
+      />
       <ConfirmDialog
         open={Boolean(staffToDelete)}
         title="Move staff account to Recycle Bin?"
