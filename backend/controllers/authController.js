@@ -1,4 +1,4 @@
-import { authClient, database } from '../config/supabase.js'
+import { authClient, database, runtimeValue } from '../config/supabase.js'
 import { getStaffProfile } from '../models/databaseModel.js'
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto'
 import { sendEmail } from '../services/notificationService.js'
@@ -54,7 +54,7 @@ export async function getMe(identity) {
 }
 
 function hashOtp(challengeId, code) {
-  const secret = process.env.PASSWORD_OTP_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+  const secret = runtimeValue('PASSWORD_OTP_SECRET') || runtimeValue('SUPABASE_SERVICE_ROLE_KEY')
   return createHash('sha256').update(`${secret}:${challengeId}:${code}`).digest('hex')
 }
 

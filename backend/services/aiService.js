@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { runtimeValue } from '../config/supabase.js'
 
 // Prefer the stable Flash models. Availability can still vary by Gemini
 // project, region, quota, or provider status, so the service has a local
@@ -10,7 +11,7 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000
 const MAX_CACHE_ENTRIES = 100
 
 export async function askGemini(prompt) {
-  const key = process.env.GEMINI_API_KEY
+  const key = runtimeValue('GEMINI_API_KEY')
   if (!key) throw Object.assign(new Error('Gemini API key is not configured'), { status: 500 })
   const cached = responseCache.get(prompt)
   if (cached && Date.now() - cached.createdAt < CACHE_TTL_MS) return cached.value
