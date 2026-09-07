@@ -29,7 +29,7 @@ import {
 } from "recharts";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
-import { askGemini } from "../services/geminiService";
+import { generateDecisionSupport } from "../services/geminiService";
 import { PageError, PageLoader } from "../components/AsyncState";
 
 export default function Dashboard() {
@@ -47,11 +47,13 @@ export default function Dashboard() {
   const [aiInsights, setAiInsights] = useState("");
   const [currentAIModel, setCurrentAIModel] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [chartLoading, setChartLoading] = useState(true);
   const [weeklyData, setWeeklyData] = useState([]);
   const [settings, setSettings] = useState({});
   const [range, setRange] = useState("weekly");
   const [suggestions, setSuggestions] = useState([]);
   const [forecasts, setForecasts] = useState(null);
+  const [overviewAlertPage, setOverviewAlertPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [aiUsage, setAiUsage] = useState({ count: 0, limit: 20 });
 
@@ -150,6 +152,7 @@ export default function Dashboard() {
 
   async function loadDashboard(runAI = true) {
     if (isInitialLoad) setLoading(true);
+    setChartLoading(true);
     setLoadError("");
     setIsInitialLoad(false);
     try {
@@ -245,65 +248,59 @@ export default function Dashboard() {
     // Generate AI forecasts
     const fc = generateForecasts(orders, inventory, usageLogs);
     setForecasts(fc);
+    setOverviewAlertPage(0);
+    // Charts are ready as soon as the filtered operational data is ready.
+    // Do not keep them blocked by the separate Gemini/DSS request below.
+    setWeeklyData(buildChartData(orders, range));
+    setChartLoading(false);
 
     // 🔥 GEMINI AI (Decision Support Layer)
     // 🔥 Gemini AI (Decision Support Layer - optimized)
-    if (runAI && !aiInsights) {
+    if (runAI && !aiInsights.length) {
       try {
         setAiLoading(true);
-
-        const aiResult = await askGemini(`
-You are a business decision support AI for a laundry shop.
-
-Data:
-- Total Orders: ${orders.length}
-- Today's Revenue: ${todayRevenue}
-- Active Orders: ${activeOrders}
-- Ready for Pickup: ${readyForPickup}
-- Low Stock Items: ${lowStockItems}
-
-Forecast:
-- Workload: ${fc.workloadLevel} (${fc.workloadPct}%)
-- Predicted Monthly Revenue: ${fc.predictedMonthlyRevenue}
-- Peak Day: ${fc.peakDay}
-
-Give exactly 3 insights ONLY using this format:
-
-Operational Recommendation: ...
-Inventory Recommendation: ...
-Revenue Improvement Idea: ...
-
-Do NOT use bullet points.
-Do NOT use markdown (**).
-Do NOT add extra text.
-`);
-
-        if (aiResult) {
-          setAiInsights(aiResult.text);
-          setCurrentAIModel(aiResult.model);
-        } else {
-          setAiInsights(
-            "AI insights temporarily unavailable. All AI models have reached their limits.",
-          );
-
-          setCurrentAIModel("No Active Model");
-        }
+        const reportableOrders = orders.filter((order) => order.status !== "cancelled");
+        const dssResult = await generateDecisionSupport({
+          metrics: {
+            totalRevenue: todayRevenue,
+            totalExpenses: 0,
+            profit: todayRevenue,
+            totalOrders: reportableOrders.length,
+            averageOrderValue: reportableOrders.length
+              ? reportableOrders.reduce((sum, order) => sum + Number(order.total_price || 0), 0) / reportableOrders.length
+              : 0,
+            operationalSignals: [
+              `${activeOrders} active orders and ${readyForPickup} orders ready for pickup.`,
+              `${lowStockItems} low-stock inventory items.`,
+              `Forecast workload: ${fc.workloadLevel} (${fc.workloadPct}%).`,
+              `Forecast monthly revenue: ₱${fc.predictedMonthlyRevenue.toLocaleString()}.`,
+            ],
+          },
+          trendData: buildChartData(reportableOrders, range),
+          forecastData: [{ date: "next-month", predictedRevenue: fc.predictedMonthlyRevenue, predictedOrders: Math.round(fc.avgDailyOrders * 30) }],
+          branch: "All branches",
+          range,
+        });
+        const labels = ["Operational Recommendation", "Inventory Recommendation", "Revenue Improvement Idea"];
+        const normalizedInsights = (Array.isArray(dssResult.insights) ? dssResult.insights : [])
+          .map((insight, index) => `${labels[index] || insight.title || "Recommendation"}: ${insight.description || "No recommendation is available."}`)
+          .join("\n");
+        setAiInsights(normalizedInsights || "Operational Recommendation: No decision-support recommendation is available for the current data.");
+        setCurrentAIModel(dssResult.model || "AI decision support");
       } catch (error) {
         console.error("AI error:", error);
-
-        setAiInsights(
-          "AI insights temporarily unavailable due to API limit. Please try again later.",
-        );
+        setAiInsights("Operational Recommendation: The recommendation service could not be reached. Operational dashboard data remains available.");
+        setCurrentAIModel("Service unavailable");
       } finally {
         setAiLoading(false);
       }
     }
 
-    setWeeklyData(buildChartData(orders, range));
     } catch (error) {
       setLoadError(error.message || "Unable to load dashboard data.");
     } finally {
       setLoading(false);
+      setChartLoading(false);
     }
   }
 
@@ -608,6 +605,11 @@ Do NOT add extra text.
   if (loading) return <PageLoader label="Loading dashboard…" />;
   if (loadError) return <PageError message={loadError} onRetry={() => loadDashboard(false)} />;
 
+  const restockAlertCount = forecasts?.restockAlerts?.length || 0;
+  const activeRestockAlert = restockAlertCount
+    ? forecasts.restockAlerts[Math.min(overviewAlertPage, restockAlertCount - 1)]
+    : null;
+
   return (
     <>
       <div className="stats-grid">
@@ -770,13 +772,15 @@ Do NOT add extra text.
         </div>
       )}
 
-      {/* AI Forecasting Overview */}
+      <section className="dashboard-workspace">
+        <aside className="dashboard-workspace-sidebar">
+        {/* AI Forecasting Overview */}
       {forecasts && (
-        <div className="card" style={{ marginBottom: 24, overflow: "hidden" }}>
-          <div className="card-header">
-            <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="card dashboard-overview-card">
+          <div className="card-header dashboard-overview-header">
+            <h3 className="dashboard-overview-title">
               <Brain size={18} style={{ color: "#8b5cf6" }} />
-              Decision Support Overview
+              <span>Decision Support<br />Overview</span>
             </h3>
             <span
               className="badge"
@@ -785,11 +789,22 @@ Do NOT add extra text.
               <Zap size={12} /> Predictions
             </span>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {/* Predicted Workload */}
+          <div className="dashboard-overview-body">
+            <div className="dashboard-forecast-summary">
+              <div className="dashboard-forecast-metric workload">
+                <span>Expected workload</span>
+                <strong>{forecasts.workloadLevel}</strong>
+                <small>{forecasts.workloadPct}% of usual demand</small>
+              </div>
+              <div className="dashboard-forecast-metric peak">
+                <span>Likely peak day</span>
+                <strong>{forecasts.peakDay}</strong>
+                <small>Plan staffing ahead</small>
+              </div>
+            </div>
 
             {/* Predicted Revenue */}
-            <div className="forecast-row forecast-revenue">
+            <div className="forecast-row forecast-revenue overview-revenue">
               <div
                 className="forecast-icon-wrap"
                 style={{
@@ -800,11 +815,11 @@ Do NOT add extra text.
                 <TrendingUp size={20} />
               </div>
               <div className="forecast-content">
-                <span className="forecast-label">Predicted Revenue:</span>
+                <span className="forecast-label">Predicted revenue</span>
                 <strong className="forecast-value" style={{ color: "#10b981" }}>
                   ₱{forecasts.predictedMonthlyRevenue.toLocaleString()}
                 </strong>
-                <span className="forecast-sublabel">Next Month</span>
+                <span className="forecast-sublabel">Estimated for the next month</span>
                 {forecasts.revenueTrend !== 0 && (
                   <span
                     className={`forecast-trend ${forecasts.revenueTrend > 0 ? "up" : "down"}`}
@@ -817,9 +832,9 @@ Do NOT add extra text.
             </div>
 
             {/* Restock Alerts */}
-            {forecasts.restockAlerts.length > 0 &&
-              forecasts.restockAlerts.map((item, i) => (
-                <div className="forecast-row forecast-restock" key={i}>
+            {activeRestockAlert && (
+              <>
+                <div className="forecast-row forecast-restock overview-restock">
                   <div
                     className="forecast-icon-wrap"
                     style={{
@@ -830,15 +845,15 @@ Do NOT add extra text.
                     <AlertTriangle size={20} />
                   </div>
                   <div className="forecast-content">
-                    <span className="forecast-label">Restock Alert:</span>
+                    <span className="forecast-label">Restock alert</span>
                     <span className="forecast-restock-text">
-                      <strong>{item.name}</strong> will run out in{" "}
+                      <strong>{activeRestockAlert.name}</strong> will run out in{" "}
                       <strong>
-                        {item.daysLeft} day{item.daysLeft !== 1 ? "s" : ""}
+                        {activeRestockAlert.daysLeft} day{activeRestockAlert.daysLeft !== 1 ? "s" : ""}
                       </strong>
                     </span>
                     <span className="forecast-sublabel">
-                      Reorder ~{item.suggestedReorder} {item.unit}
+                      Reorder ~{activeRestockAlert.suggestedReorder} {activeRestockAlert.unit}
                     </span>
                   </div>
                   <button
@@ -849,37 +864,43 @@ Do NOT add extra text.
                     Restock <ArrowRight size={13} />
                   </button>
                 </div>
-              ))}
+                {restockAlertCount > 1 && (
+                  <div className="overview-pagination" aria-label="Restock alert pagination">
+                    <button
+                      type="button"
+                      className="overview-pagination-button"
+                      onClick={() => setOverviewAlertPage((current) => Math.max(0, current - 1))}
+                      disabled={overviewAlertPage === 0}
+                    >
+                      Previous
+                    </button>
+                    <span>Alert {overviewAlertPage + 1} of {restockAlertCount}</span>
+                    <button
+                      type="button"
+                      className="overview-pagination-button"
+                      onClick={() => setOverviewAlertPage((current) => Math.min(restockAlertCount - 1, current + 1))}
+                      disabled={overviewAlertPage >= restockAlertCount - 1}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
-      {(aiLoading || aiInsights) && (
-        <div
-          className="card"
-          style={{
-            marginBottom: 24,
-            border: "1px solid #e9d5ff",
-            background: "linear-gradient(135deg, #faf5ff, #ffffff)",
-          }}
-        >
-          {/* HEADER */}
-          <div className="card-header">
-            <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Brain size={18} style={{ color: "#8b5cf6" }} />
-              AI Insights
-            </h3>
-
-            <span
-              className="badge"
-              style={{
-                background: "#ede9fe",
-                color: "#7c3aed",
-                fontSize: 11,
-              }}
-            >
-              {currentAIModel || "Loading Model..."}
-            </span>
-          </div>
+        </aside>
+        <div className="dashboard-workspace-content">
+      {(aiLoading || aiInsights.length > 0) && (
+        <section className="dashboard-ai-card">
+          <header className="dashboard-ai-header">
+            <div className="dashboard-ai-heading">
+              <span className="dashboard-ai-brain"><Brain size={20} /></span>
+              <div><h3>AI Decision Support</h3><p>Recommendations based on the current operational snapshot</p></div>
+            </div>
+            <span className="dashboard-ai-model">{currentAIModel || "Preparing analysis"}</span>
+          </header>
 
           {/* CONTENT */}
           {aiLoading ? (
@@ -970,7 +991,7 @@ Do NOT add extra text.
                 })}
             </div>
           )}
-        </div>
+        </section>
       )}
       <div style={{ marginBottom: 10 }}>
         {["weekly", "monthly", "yearly"].map((r) => (
@@ -985,6 +1006,20 @@ Do NOT add extra text.
       </div>
 
       <div className="charts-grid">
+        {chartLoading ? (
+          ["orders", "revenue"].map((chart) => (
+            <div className="card dashboard-chart-loading" key={chart}>
+              <div className="dashboard-chart-loading-header"><span className="dashboard-chart-loading-title" /><span className="dashboard-chart-loading-chip" /></div>
+              <div className="dashboard-chart-loading-body">
+                <span className="dashboard-chart-axis y" />
+                <div className="dashboard-chart-bars">{[38, 62, 48, 78, 55, 86, 68].map((height, index) => <span key={index} style={{ height: `${height}%` }} />)}</div>
+                <span className="dashboard-chart-axis x" />
+              </div>
+              <p>Updating {range} chart…</p>
+            </div>
+          ))
+        ) : (
+          <>
         <div className="card">
           <div className="card-header">
             <h3>{range.charAt(0).toUpperCase() + range.slice(1)} Orders</h3>
@@ -1067,6 +1102,8 @@ Do NOT add extra text.
             </AreaChart>
           </ResponsiveContainer>
         </div>
+          </>
+        )}
       </div>
 
       <div className="card">
@@ -1260,6 +1297,8 @@ Do NOT add extra text.
           </div>
         </div>
       </div>
+        </div>
+      </section>
     </>
   );
 }
