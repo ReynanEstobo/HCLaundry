@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useRealtime } from '../lib/useRealtime'
 import { PageError, PageLoader } from '../components/AsyncState'
+import { compareOrdersForList } from '../utils/orderListPriority'
 import {
   Clock, AlertTriangle, ShoppingBag, CheckCircle2, Timer, User, RefreshCw, Package
 } from 'lucide-react'
@@ -37,7 +38,7 @@ export default function StaffDashboard() {
         supabase.from('inventory_items').select('*, inventory_categories(name)')
       ])
       if (ordersRes.error || inventoryRes.error) throw ordersRes.error || inventoryRes.error
-      setOrders(ordersRes.data || [])
+      setOrders([...(ordersRes.data || [])].sort(compareOrdersForList))
       setInventory(inventoryRes.data || [])
     } catch (error) {
       setLoadError(error.message || 'Unable to load your branch dashboard.')

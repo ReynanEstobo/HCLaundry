@@ -7,6 +7,7 @@ import {
   Percent,
   ShoppingBag,
   Printer,
+  RefreshCw,
   TrendingUp,
   Users,
   Timer,
@@ -178,9 +179,12 @@ export default function Analytics() {
   const [forecastLoading, setForecastLoading] = useState(false);
 
   const [forecastModel, setForecastModel] = useState("");
+  const [forecastAiMeta, setForecastAiMeta] = useState({ source: "pending", savedAt: null, isCached: false });
 
   const [aiInsights, setAiInsights] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [insightAiMeta, setInsightAiMeta] = useState({ source: "pending", savedAt: null, isCached: false });
+  const [manualAiRefresh, setManualAiRefresh] = useState(false);
 
   useEffect(() => {
     loadAnalytics();
@@ -190,16 +194,19 @@ export default function Analytics() {
     loadAnalytics(false);
   });
   useEffect(() => {
-    if (aiLoading) return;
+    if (aiLoading || manualAiRefresh) return;
 
     if (descriptiveData.length > 0 && forecastData.length > 0) {
       generateAIInsights(orders, expenses);
     }
-  }, [forecastData, selectedBranch, range, operationalSummary]);
+  }, [forecastData, selectedBranch, range, operationalSummary, manualAiRefresh]);
 
   async function loadAnalytics() {
     setLoading(true);
     setLoadError("");
+    setForecastAiMeta({ source: "pending", savedAt: null, isCached: false });
+    setInsightAiMeta({ source: "pending", savedAt: null, isCached: false });
+    setAiInsights([]);
     try {
 
     const now = new Date();
@@ -447,7 +454,7 @@ export default function Analytics() {
     return [...totals.values()].sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  async function generateForecast(orderData) {
+  async function generateForecast(orderData, { forceRefresh = false } = {}) {
     try {
       setForecastLoading(true);
 
@@ -561,12 +568,13 @@ export default function Analytics() {
       const forecastVersion = `${dailyHistory.map((day) => `${day.date}:${day.revenue}:${day.orders}`).join("|")}_${futureForecast.map((item) => item.forecastDate).join("|")}`;
       // v2 intentionally ignores prior cached labels from before the
       // resilient forecast response format was introduced.
-      const forecastCacheKey = `ai_forecast_v2_${selectedBranch}_${range}_${forecastVersion}`;
+      const forecastCacheKey = `ai_forecast_v3_${selectedBranch}_${range}_${forecastVersion}`;
       const cachedForecast = localStorage.getItem(forecastCacheKey);
       const cachedForecastTime = localStorage.getItem(`${forecastCacheKey}_time`);
       const SIX_HOURS = 6 * 60 * 60 * 1000;
 
       if (
+        !forceRefresh &&
         cachedForecast &&
         cachedForecastTime &&
         Date.now() - Number(cachedForecastTime) < SIX_HOURS
@@ -576,7 +584,12 @@ export default function Analytics() {
           if (Array.isArray(parsedCache.data) && parsedCache.data.length) {
             setForecastData(parsedCache.data);
             setForecastModel(parsedCache.model || "Gemini-assisted forecast (cached)");
-            return;
+            setForecastAiMeta({
+              source: parsedCache.source || (parsedCache.model?.includes("Gemini") ? "gemini" : "baseline"),
+              savedAt: Number(cachedForecastTime),
+              isCached: true,
+            });
+            return parsedCache.data;
           }
         } catch {
           localStorage.removeItem(forecastCacheKey);
@@ -605,17 +618,23 @@ export default function Analytics() {
             isPrediction: true,
           }));
         const modelLabel = aiForecast.method || `Gemini-assisted forecast (${aiForecast.model})`;
+        const savedAt = Date.now();
+        const source = aiForecast.isFallback ? "baseline" : "gemini";
         setForecastData(normalizedForecast);
         setForecastModel(modelLabel);
+        setForecastAiMeta({ source, savedAt, isCached: false });
         localStorage.setItem(
           forecastCacheKey,
-          JSON.stringify({ data: normalizedForecast, model: modelLabel }),
+          JSON.stringify({ data: normalizedForecast, model: modelLabel, source }),
         );
-        localStorage.setItem(`${forecastCacheKey}_time`, Date.now().toString());
+        localStorage.setItem(`${forecastCacheKey}_time`, savedAt.toString());
         if (aiForecast.insights?.length) setAiInsights(aiForecast.insights);
+        return normalizedForecast;
       } catch (aiError) {
         console.warn("Forecast service failed; keeping the local trend baseline.", aiError.message);
+        setForecastAiMeta({ source: "baseline", savedAt: null, isCached: false });
         setForecastModel("Local trend baseline · low confidence");
+        return futureForecast;
       }
     } catch (err) {
       console.error(err);
@@ -625,12 +644,12 @@ export default function Analytics() {
       setForecastLoading(false);
     }
   }
-  async function generateAIInsights(orderData, expenseData) {
+  async function generateAIInsights(orderData, expenseData, { forceRefresh = false, forecastOverride = null } = {}) {
     try {
       setAiLoading(true);
 
       const analyticsVersion = `${orderData.length}-${expenseData.length}-${stats.totalRevenue || 0}-${stats.totalExpenses || 0}-${forecastData.map((item) => item.predicted).join(",")}`;
-      const cacheKey = `ai_insights_${selectedBranch}_${range}_${analyticsVersion}`;
+      const cacheKey = `ai_insights_v2_${selectedBranch}_${range}_${analyticsVersion}`;
 
       const cached = localStorage.getItem(cacheKey);
 
@@ -640,11 +659,20 @@ export default function Analytics() {
 
       // USE CACHE
       if (
+        !forceRefresh &&
         cached &&
         lastRequest &&
         Date.now() - Number(lastRequest) < SIX_HOURS
       ) {
-        setAiInsights(JSON.parse(cached));
+        const parsedCache = JSON.parse(cached);
+        const cachedInsights = Array.isArray(parsedCache) ? parsedCache : parsedCache.insights;
+        if (!Array.isArray(cachedInsights)) throw new Error("Invalid cached AI insights");
+        setAiInsights(cachedInsights);
+        setInsightAiMeta({
+          source: parsedCache.source || "gemini",
+          savedAt: Number(lastRequest),
+          isCached: true,
+        });
 
         setAiLoading(false);
 
@@ -677,14 +705,17 @@ export default function Analytics() {
           ],
         },
         trendData: chartData,
-        forecastData,
+        forecastData: forecastOverride || forecastData,
         branch: selectedBranch,
         range,
       });
 
+      const savedAt = Date.now();
+      const source = dssResult.isFallback ? "baseline" : "gemini";
       setAiInsights(dssResult.insights);
-      localStorage.setItem(cacheKey, JSON.stringify(dssResult.insights));
-      localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+      setInsightAiMeta({ source, savedAt, isCached: false });
+      localStorage.setItem(cacheKey, JSON.stringify({ insights: dssResult.insights, source }));
+      localStorage.setItem(`${cacheKey}_time`, savedAt.toString());
       return;
 
       /* Legacy free-form DSS prompt retained only as a reference.
@@ -749,6 +780,8 @@ Rules:
     } catch (err) {
       console.error(err);
 
+      setInsightAiMeta({ source: "baseline", savedAt: null, isCached: false });
+
       setAiInsights([
         {
           title: "Revenue Trend",
@@ -772,6 +805,29 @@ Rules:
   }
 
   const descriptiveData = getDescriptiveData();
+
+  const formatAiCacheTime = (timestamp) => timestamp
+    ? new Date(timestamp).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })
+    : "Not cached";
+  const describeAiSource = (meta) => {
+    if (meta.source === "gemini") return meta.isCached ? "Gemini AI result (cached)" : "Generated by Gemini AI";
+    if (meta.source === "baseline") return "Local baseline (Gemini unavailable)";
+    return "Preparing AI output";
+  };
+
+  async function regenerateAiOutputs() {
+    if (manualAiRefresh || forecastLoading || aiLoading) return;
+    setManualAiRefresh(true);
+    try {
+      const freshForecast = await generateForecast(orders, { forceRefresh: true });
+      await generateAIInsights(orders, expenses, {
+        forceRefresh: true,
+        forecastOverride: freshForecast || forecastData,
+      });
+    } finally {
+      setManualAiRefresh(false);
+    }
+  }
 
   const reportScope = selectedBranch === "all" ? "All branches" : selectedBranch;
   const reportPeriod = customRange.start && customRange.end
@@ -1013,6 +1069,25 @@ Rules:
           <OperationalList icon={<Users size={17} />} title="Staff Productivity" accent="#10b981" empty="No staff activity yet" items={operationalSummary.staffPerformance.map((staff) => `${staff.name} · ${staff.completed} released / ${staff.created} handled`)} />
         </div>
       </div>
+
+      {/* AI OUTPUT STATUS */}
+      <section className="analytics-ai-provenance" aria-label="AI analytics output status">
+        <div className="analytics-ai-provenance-icon"><Lightbulb size={19} /></div>
+        <div className="analytics-ai-provenance-copy">
+          <strong>AI-assisted analytics outputs</strong>
+          <span>Forecast: {describeAiSource(forecastAiMeta)} · Last cached: {formatAiCacheTime(forecastAiMeta.savedAt)}</span>
+          <span>Decision support: {describeAiSource(insightAiMeta)} · Last cached: {formatAiCacheTime(insightAiMeta.savedAt)}</span>
+        </div>
+        <button
+          type="button"
+          className="analytics-ai-regenerate"
+          onClick={regenerateAiOutputs}
+          disabled={manualAiRefresh || forecastLoading || aiLoading || loading}
+        >
+          <RefreshCw size={15} className={manualAiRefresh ? "analytics-ai-refreshing" : ""} />
+          {manualAiRefresh ? "Regenerating…" : "Regenerate AI outputs"}
+        </button>
+      </section>
 
       {/* CHARTS */}
       <div className="charts-grid">

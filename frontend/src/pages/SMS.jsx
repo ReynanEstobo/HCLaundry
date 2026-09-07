@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { PageError, PageLoader } from "../components/AsyncState";
+import { compareOrdersForList } from "../utils/orderListPriority";
 
 export default function Notifications() {
   const [orders, setOrders] = useState([]);
@@ -43,7 +44,7 @@ export default function Notifications() {
       });
 
     if (error) throw error;
-    setOrders(ordersData || []);
+    setOrders([...(ordersData || [])].sort(compareOrdersForList));
     } catch (error) {
       setLoadError(error.message || "Unable to load notification data.");
     } finally {

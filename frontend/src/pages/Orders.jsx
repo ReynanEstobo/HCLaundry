@@ -24,6 +24,7 @@ import { sendEmail, sendSms } from "../services/api/notificationApi";
 import { cancelBranchOrder, createBranchOrder, getVisibleCustomers, lookupCustomerByPhone } from "../services/api/operationsApi";
 import { useAuth } from "../context/AuthContext";
 import { PageError, PageLoader } from "../components/AsyncState";
+import { compareOrdersForList } from "../utils/orderListPriority";
 
 const STATUS_FLOW = [
   "pending",
@@ -1025,12 +1026,7 @@ export default function Orders() {
         o.customers?.name?.toLowerCase().includes(q)
       );
     })
-    .sort((a, b) => {
-      if (a.status === "released" && b.status !== "released") return 1;
-      if (a.status !== "released" && b.status === "released") return -1;
-
-      return (a.priority_order ?? 0) - (b.priority_order ?? 0);
-    });
+    .sort(compareOrdersForList);
 
   if (loading) return <PageLoader label="Loading orders…" />;
   if (loadError) return <PageError message={loadError} onRetry={loadData} />;

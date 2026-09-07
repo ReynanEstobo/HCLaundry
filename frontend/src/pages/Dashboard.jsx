@@ -31,6 +31,7 @@ import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { generateDecisionSupport } from "../services/geminiService";
 import { PageError, PageLoader } from "../components/AsyncState";
+import { compareOrdersForList } from "../utils/orderListPriority";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -220,18 +221,7 @@ export default function Dashboard() {
       lowStockItems,
     });
 
-    const sorted = (recentRes.data || []).sort((a, b) => {
-      // 1. Non-released first
-      const aReleased = a.status === "released";
-      const bReleased = b.status === "released";
-
-      if (aReleased !== bReleased) {
-        return aReleased ? 1 : -1;
-      }
-
-      // 2. Oldest first
-      return new Date(a.created_at) - new Date(b.created_at);
-    });
+    const sorted = [...(recentRes.data || [])].sort(compareOrdersForList);
 
     setRecentOrders(sorted);
 

@@ -31,6 +31,20 @@ function applyFilters(query, filters = []) {
   }, query)
 }
 
+// Keep operational queues focused on actionable work. Released orders remain
+// visible after active work, while cancelled orders are preserved for audit
+// purposes but always appear at the bottom of an unfiltered order list.
+function compareOrdersForList(a, b) {
+  const rank = order => order?.status === 'cancelled' ? 2 : order?.status === 'released' ? 1 : 0
+  const rankDifference = rank(a) - rank(b)
+  if (rankDifference !== 0) return rankDifference
+
+  const priorityDifference = Number(a?.priority_order ?? 0) - Number(b?.priority_order ?? 0)
+  if (priorityDifference !== 0) return priorityDifference
+
+  return new Date(a?.created_at || 0).getTime() - new Date(b?.created_at || 0).getTime()
+}
+
 // Operational data must never cross a staff member's assigned branch. Branch
 // lookup/assignment is always performed on the server, not trusted from UI data.
 const BRANCH_SCOPED_TABLES = new Set([
@@ -145,6 +159,9 @@ export async function execute(table, request, identity) {
     return { data: archived.data || [], error: null, count: archived.data?.length || 0 }
   }
   let query = database.from(table)
+  // Supabase's order() cannot express a portable CASE status priority. Fetch
+  // the filtered order set, sort it once here, then apply pagination below.
+  const sortOrderListInMemory = table === 'orders' && operation === 'select' && !single
 
   if (operation === 'select') {
     query = query.select(selection, count ? { count } : undefined)
@@ -155,13 +172,19 @@ export async function execute(table, request, identity) {
   if (operation === 'delete') query = query.delete()
   query = applyFilters(query, filters)
   if (operation !== 'select' && returning) query = query.select(selection)
-  orders.forEach(({ column, options }) => { query = query.order(column, options) })
-  if (range) query = query.range(range.from, range.to)
-  if (limit) query = query.limit(limit)
+  if (!sortOrderListInMemory) orders.forEach(({ column, options }) => { query = query.order(column, options) })
+  if (range && !sortOrderListInMemory) query = query.range(range.from, range.to)
+  if (limit && !sortOrderListInMemory) query = query.limit(limit)
   if (single === 'single') query = query.single()
   if (single === 'maybeSingle') query = query.maybeSingle()
 
   const result = await query
+  if (sortOrderListInMemory && !result.error && Array.isArray(result.data)) {
+    const sorted = [...result.data].sort(compareOrdersForList)
+    if (range) result.data = sorted.slice(range.from, range.to + 1)
+    else if (limit) result.data = sorted.slice(0, limit)
+    else result.data = sorted
+  }
   return { data: result.data, error: result.error, count: result.count }
 }
 
