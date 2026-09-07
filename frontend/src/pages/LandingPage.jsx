@@ -20,7 +20,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
-import { sendEmail } from "../services/api/notificationApi";
+import { apiFetch } from "../services/api/client";
 
 function useScrollReveal(threshold = 0.15) {
   const ref = useRef(null);
@@ -452,19 +452,10 @@ export default function LandingPage() {
     setSending(true);
 
     try {
-      const data = await sendEmail({
-          to: "shopjlaundry7@gmail.com",
-          subject: "New Contact Message - H&C Laundry",
-          body: `
-Name: ${formData.name}
-Email: ${formData.email}
-Phone: ${formData.phone}
-Address: ${formData.address}
-
-Message:
-${formData.message}
-          `,
-        });
+      const data = await apiFetch("/api/public/contact", {
+        method: "POST",
+        body: JSON.stringify(formData),
+      });
 
       if (data.success) {
         setNotification({

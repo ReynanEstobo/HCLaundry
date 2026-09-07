@@ -10,6 +10,7 @@ import { supabase } from './supabase'
  */
 export function useRealtime(tables, onChanged) {
   const refreshTimer = useRef(null)
+  const pollingTimer = useRef(null)
   const onChangedRef = useRef(onChanged)
 
   // Keep the subscription stable while always using the current page/filter
@@ -40,8 +41,15 @@ export function useRealtime(tables, onChanged) {
 
     channel.subscribe()
 
+    // The local Node server provides Server-Sent Events, while the deployed
+    // Cloudflare Worker deliberately does not keep a Node event stream alive.
+    // A light background poll keeps every data screen current in production
+    // without interrupting the page or showing a full-screen loader.
+    pollingTimer.current = setInterval(() => onChangedRef.current?.(), 30_000)
+
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current)
+      if (pollingTimer.current) clearInterval(pollingTimer.current)
       supabase.removeChannel(channel)
     }
   }, [tables.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps

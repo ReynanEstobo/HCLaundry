@@ -1,4 +1,6 @@
 import { database } from '../config/supabase.js'
+import { runtimeValue } from '../config/supabase.js'
+import { sendEmail } from '../services/notificationService.js'
 
 export async function trackOrder(orderNumber) {
   if (!orderNumber?.trim()) throw Object.assign(new Error('Tracking number is required'), { status: 400 })
@@ -15,4 +17,33 @@ export async function getPublicSettings() {
   const { data, error } = await database.from('settings').select('*').single()
   if (error) throw Object.assign(new Error(error.message), { status: 400 })
   return { data }
+}
+
+export async function sendContactMessage(body) {
+  const name = String(body?.name || '').trim()
+  const email = String(body?.email || '').trim()
+  const phone = String(body?.phone || '').trim()
+  const address = String(body?.address || '').trim()
+  const message = String(body?.message || '').trim()
+  const inbox = runtimeValue('CONTACT_EMAIL') || runtimeValue('GMAIL_EMAIL')
+
+  if (!name || !email || !message) {
+    throw Object.assign(new Error('Name, email, and message are required.'), { status: 400 })
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw Object.assign(new Error('Enter a valid email address.'), { status: 400 })
+  }
+  if (name.length > 120 || email.length > 254 || phone.length > 40 || address.length > 240 || message.length > 4_000) {
+    throw Object.assign(new Error('Your message contains a field that is too long.'), { status: 400 })
+  }
+  if (!inbox) {
+    throw Object.assign(new Error('The contact inbox is not configured.'), { status: 503 })
+  }
+
+  await sendEmail({
+    to: inbox,
+    subject: 'New website contact message — H&C Laundry',
+    body: `Name: ${name}\nEmail: ${email}\nPhone: ${phone || 'Not provided'}\nAddress: ${address || 'Not provided'}\n\nMessage:\n${message}`,
+  })
+  return { success: true }
 }

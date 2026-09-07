@@ -2,6 +2,7 @@ import { CheckCircle, Loader, Mail } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
+import { apiFetch } from "../services/api/client";
 import { useRealtime } from "../lib/useRealtime";
 import { PageError, PageLoader } from "../components/AsyncState";
 import { compareOrdersForList } from "../utils/orderListPriority";
@@ -77,28 +78,17 @@ export default function Notifications() {
     setSending(true);
 
     try {
-      const res = await fetch("/api/notifications/email", {
+      await apiFetch("/api/notifications/email", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(emailForm),
       });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        toast.success("Email sent successfully!");
-
-        setEmailForm({
-          to: "",
-          subject: "",
-          body: "",
-        });
-      } else {
-        toast.error(data.error || "Failed to send email");
-      }
-    } catch {
+      toast.success("Email sent successfully!");
+      setEmailForm({
+        to: "",
+        subject: "",
+        body: "",
+      });
+    } catch (error) {
       toast.error("Failed to send email — check network");
     }
 
@@ -119,11 +109,8 @@ export default function Notifications() {
     }));
 
     try {
-      const res = await fetch("/api/notifications/email", {
+      await apiFetch("/api/notifications/email", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           to: order.customers.email,
 
@@ -143,13 +130,9 @@ Thank you for choosing H&C Laundry!
         }),
       });
 
-      if (res.ok) {
-        toast.success(`Email sent to ${order.customers.email}`);
-      } else {
-        toast.error("Failed to send email");
-      }
-    } catch {
-      toast.error("Failed to send email");
+      toast.success(`Email sent to ${order.customers.email}`);
+    } catch (error) {
+      toast.error(error.message || "Failed to send email");
     }
 
     setEmailSending((prev) => ({

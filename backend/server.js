@@ -8,7 +8,7 @@ import { listVisibleCustomers, lookupCustomer, registerCustomer } from './contro
 import { listRecycleBin, restoreRecord } from './controllers/auditController.js'
 import { login, signUp, getMe, requestForgotPasswordOtp, requestPasswordOtp, resetForgottenPassword, updatePassword } from './controllers/authController.js'
 import { provisionStaff, resetStaffCredentials, updateProvisionedStaff } from './controllers/staffProvisionController.js'
-import { getPublicSettings, trackOrder } from './controllers/publicController.js'
+import { getPublicSettings, sendContactMessage, trackOrder } from './controllers/publicController.js'
 import { sendEmail, sendSms } from './services/notificationService.js'
 import { askGemini, generateForecast, generateDecisionSupport } from './services/aiService.js'
 import { events } from './services/realtimeService.js'
@@ -63,6 +63,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && path === 'ai/dss') { requireAdmin(await authenticate(request)); return write(response, 200, await generateDecisionSupport(await readBody(request))) }
     if (request.method === 'GET' && path === 'public/orders/track') return write(response, 200, await trackOrder(url.searchParams.get('q')))
     if (request.method === 'GET' && path === 'public/settings') return write(response, 200, await getPublicSettings())
+    if (request.method === 'POST' && path === 'public/contact') return write(response, 200, await sendContactMessage(await readBody(request)))
     if (request.method === 'POST' && path === 'orders/create') return write(response, 200, await createOrder(await readBody(request), await authenticate(request)))
     if (request.method === 'POST' && path === 'orders/transition') return write(response, 200, await transitionOrder(await readBody(request), await authenticate(request)))
     if (request.method === 'POST' && path === 'orders/cancel') return write(response, 200, await cancelOrder(await readBody(request), await authenticate(request)))
