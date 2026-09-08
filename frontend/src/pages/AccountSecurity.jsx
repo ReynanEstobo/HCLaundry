@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { apiFetch } from '../services/api/client'
 import { supabase } from '../lib/supabase'
 import LoadingButton from '../components/LoadingButton'
+import ChangeEmail from '../components/ChangeEmail'
 
 function PasswordField({ label, value, onChange, visible, onToggle, placeholder }) {
   return <div className="login-field">
@@ -86,6 +87,7 @@ export default function AccountSecurity() {
         <LoadingButton type="submit" className="btn btn-primary" loading={saving} loadingLabel="Changing password…"><LockKeyhole size={16} /> Change password</LoadingButton>
       </form>
     </section>
+    <ChangeEmail onChanged={() => { setOtp(''); setDestination(''); }} />
     {passwordChanged && <div className="modal-overlay account-security-success-overlay" role="presentation">
       <section className="account-security-success-dialog" role="alertdialog" aria-modal="true" aria-labelledby="password-success-title">
         <span className="account-security-success-icon"><CheckCircle2 size={32} /></span>

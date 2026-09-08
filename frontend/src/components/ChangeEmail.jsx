@@ -1,0 +1,79 @@
+import { useState } from 'react'
+import { CheckCircle2, Eye, EyeOff, MailCheck } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { apiFetch } from '../services/api/client'
+import LoadingButton from './LoadingButton'
+
+export default function ChangeEmail({ onChanged }) {
+  const { user, contactEmail, refreshProfile } = useAuth()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [visible, setVisible] = useState(false)
+  const [challenge, setChallenge] = useState(null)
+  const [otp, setOtp] = useState('')
+  const [busy, setBusy] = useState('')
+  const [error, setError] = useState('')
+  const [savedEmail, setSavedEmail] = useState('')
+  const current = savedEmail || contactEmail || (user?.email?.endsWith('.local') ? '' : user?.email)
+
+  async function sendCode(event) {
+    event.preventDefault()
+    if (busy) return
+    setBusy('send')
+    setError('')
+    try {
+      const result = await apiFetch('/api/auth/email/otp', {
+        method: 'POST', body: JSON.stringify({ newEmail: email, currentPassword: password }),
+      })
+      setChallenge(result)
+      setOtp('')
+      setPassword('')
+    } catch (error) { setError(error.message) }
+    finally { setBusy('') }
+  }
+
+  async function confirm(event) {
+    event.preventDefault()
+    if (busy || !challenge) return
+    setBusy('confirm')
+    setError('')
+    try {
+      const result = await apiFetch('/api/auth/email', {
+        method: 'PATCH', body: JSON.stringify({ challengeId: challenge.challengeId, otp }),
+      })
+      setSavedEmail(result.contactEmail)
+      setChallenge(null)
+      setEmail('')
+      setOtp('')
+      onChanged?.()
+      await refreshProfile()
+    } catch (error) { setError(error.message) }
+    finally { setBusy('') }
+  }
+
+  return <section className="card settings-card change-email-card">
+    <div className="settings-card-header">
+      <div className="settings-card-icon blue"><MailCheck size={22} /></div>
+      <div><h3>Change Bound Email</h3><p>Choose where you receive password verification and recovery codes.</p></div>
+    </div>
+    <div className="settings-info-row"><span className="settings-label">Bound email</span><span className="settings-value" style={{ overflowWrap: 'anywhere' }}>{current || 'No email bound'}</span></div>
+    <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: '16px 0' }}>Confirm your current password, then verify a code sent to the new address. Your existing sign-in details stay the same.</p>
+    {savedEmail && <div className="account-security-notice" role="status"><CheckCircle2 size={20} /><span>Email changed successfully. Future password codes will be sent to <strong>{savedEmail}</strong>. Request a fresh password code after this change.</span></div>}
+    {error && <p role="alert" style={{ color: 'var(--danger, #b91c1c)' }}>{error}</p>}
+    {!challenge ? <form onSubmit={sendCode}>
+      <div className="form-group"><label htmlFor="bound-email">New email address</label><input id="bound-email" className="form-control" type="email" autoComplete="email" maxLength={254} value={email} onChange={event => setEmail(event.target.value)} disabled={Boolean(busy)} required /></div>
+      <div className="form-group"><label htmlFor="bound-email-password">Current password</label><div className="settings-input-wrapper">
+        <input id="bound-email-password" className="form-control" type={visible ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} disabled={Boolean(busy)} style={{ paddingRight: 42 }} required />
+        <button type="button" className="settings-eye-btn" aria-label={visible ? 'Hide password' : 'Show password'} onClick={() => setVisible(!visible)}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+      </div></div>
+      <LoadingButton type="submit" className="btn btn-primary" loading={busy === 'send'} loadingLabel="Sending code...">Send code to new email</LoadingButton>
+    </form> : <form onSubmit={confirm}>
+      <div className="account-security-notice" role="status"><MailCheck size={18} /><span>Code sent to <strong>{challenge.destination}</strong>. Expires in 10 minutes; maximum five attempts.</span></div>
+      <div className="form-group" style={{ marginTop: 16 }}><label htmlFor="bound-email-code">Verification code from new email</label><input id="bound-email-code" className="form-control" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={otp} onChange={event => setOtp(event.target.value.replace(/\D/g, ''))} disabled={Boolean(busy)} required /></div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+        <LoadingButton type="submit" className="btn btn-primary" loading={busy === 'confirm'} loadingLabel="Updating email...">Verify and change email</LoadingButton>
+        <button type="button" className="btn btn-secondary" disabled={Boolean(busy)} onClick={() => { setChallenge(null); setOtp(''); setError('') }}>Change address / request another code</button>
+      </div>
+    </form>}
+  </section>
+}

@@ -10,6 +10,7 @@ import { sendEmail, sendSms } from '../backend/services/notificationService.js'
 import { askGemini, generateForecast, generateDecisionSupport } from '../backend/services/aiService.js'
 import { resourceRoutes } from '../backend/routes/resourceRoutes.js'
 import { configureRuntimeEnv } from '../backend/config/supabase.js'
+import { requestEmailChange, confirmEmailChange } from '../backend/controllers/emailChangeController.js'
 
 const SECURITY_HEADERS = {
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests",
@@ -53,6 +54,8 @@ const ratePolicies = {
   'POST:auth/forgot-password/otp': { limit: 5, windowMs: 15 * 60 * 1000 },
   'PATCH:auth/forgot-password': { limit: 8, windowMs: 15 * 60 * 1000 },
   'POST:auth/password/otp': { limit: 5, windowMs: 15 * 60 * 1000 },
+  'POST:auth/email/otp': { limit: 5, windowMs: 15 * 60 * 1000 },
+  'PATCH:auth/email': { limit: 10, windowMs: 15 * 60 * 1000 },
   'POST:public/contact': { limit: 3, windowMs: 15 * 60 * 1000 },
   'GET:public/orders/track': { limit: 30, windowMs: 60 * 1000 },
 }
@@ -96,6 +99,8 @@ async function api(request, env) {
   if (method === 'PATCH' && path === 'auth/forgot-password') return json(await resetForgottenPassword(await body(request)))
   if (method === 'POST' && path === 'auth/signup') { requireAdmin(await authenticate(request)); return json(await signUp(await body(request))) }
   if (method === 'GET' && path === 'auth/me') return json(await getMe(await authenticate(request)))
+  if (method === 'POST' && path === 'auth/email/otp') { const identity = await authenticate(request); return json(await requestEmailChange(await body(request), identity)) }
+  if (method === 'PATCH' && path === 'auth/email') { const identity = await authenticate(request); return json(await confirmEmailChange(await body(request), identity)) }
   if (method === 'POST' && path === 'auth/password/otp') return json(await requestPasswordOtp(await body(request), await authenticate(request)))
   if (method === 'PATCH' && path === 'auth/password') return json(await updatePassword(await body(request), await authenticate(request)))
   if (method === 'POST' && path === 'staff/provision') { const identity = await authenticate(request); requireAdmin(identity); return json(await provisionStaff(await body(request), identity)) }

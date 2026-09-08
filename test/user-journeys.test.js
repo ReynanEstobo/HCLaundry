@@ -87,6 +87,8 @@ test('visitor journey: contact form validation rejects incomplete input before e
 test('security journey: protected staff endpoints reject a visitor without a session', async () => {
   const cases = [
     ['auth/me', 'GET'],
+    ['auth/email/otp', 'POST'],
+    ['auth/email', 'PATCH'],
     ['staff/provision', 'POST'],
     ['notifications/email', 'POST'],
     ['orders/create', 'POST'],

@@ -13,6 +13,7 @@ import { sendEmail, sendSms } from './services/notificationService.js'
 import { askGemini, generateForecast, generateDecisionSupport } from './services/aiService.js'
 import { events } from './services/realtimeService.js'
 import { resourceRoutes } from './routes/resourceRoutes.js'
+import { requestEmailChange, confirmEmailChange } from './controllers/emailChangeController.js'
 
 const port = Number(process.env.PORT || 3001)
 
@@ -51,6 +52,8 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'PATCH' && path === 'auth/forgot-password') return write(response, 200, await resetForgottenPassword(await readBody(request)))
     if (request.method === 'POST' && path === 'auth/signup') { requireAdmin(await authenticate(request)); return write(response, 200, await signUp(await readBody(request))) }
     if (request.method === 'GET' && path === 'auth/me') return write(response, 200, await getMe(await authenticate(request)))
+    if (request.method === 'POST' && path === 'auth/email/otp') { const identity = await authenticate(request); return write(response, 200, await requestEmailChange(await readBody(request), identity)) }
+    if (request.method === 'PATCH' && path === 'auth/email') { const identity = await authenticate(request); return write(response, 200, await confirmEmailChange(await readBody(request), identity)) }
     if (request.method === 'POST' && path === 'auth/password/otp') return write(response, 200, await requestPasswordOtp(await readBody(request), await authenticate(request)))
     if (request.method === 'PATCH' && path === 'auth/password') return write(response, 200, await updatePassword(await readBody(request), await authenticate(request)))
     if (request.method === 'POST' && path === 'staff/provision') { const identity = await authenticate(request); requireAdmin(identity); return write(response, 200, await provisionStaff(await readBody(request), identity)) }

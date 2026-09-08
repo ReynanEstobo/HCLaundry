@@ -401,6 +401,10 @@ body {
   border-top: 4px solid #28a9e1;
   box-shadow: 0 14px 38px rgba(28, 61, 90, .10);
 }
+.account-security-page > .change-email-card { margin-top: 24px; }
+.change-email-card { min-width: 0; }
+.change-email-card .account-security-notice { overflow-wrap: anywhere; }
+.change-email-card .settings-info-row { flex-wrap: wrap; gap: 8px; }
 .account-security-header { margin-bottom: 20px; }
 .account-security-header h3 { font-size: clamp(22px, 2.6vw, 28px); margin-top: 2px; }
 .account-security-header p { max-width: 510px; line-height: 1.55; }

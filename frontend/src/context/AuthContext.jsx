@@ -76,7 +76,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, role, staffName, branch, contactEmail, mustChangePassword, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, role, staffName, branch, contactEmail, mustChangePassword, loading, signIn, signOut, refreshProfile: () => fetchStaffRole(user) }}>
       {children}
     </AuthContext.Provider>
   )

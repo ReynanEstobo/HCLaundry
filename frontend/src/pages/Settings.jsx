@@ -20,9 +20,10 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { apiFetch } from "../services/api/client";
 import LoadingButton from "../components/LoadingButton";
+import ChangeEmail from "../components/ChangeEmail";
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, contactEmail } = useAuth();
 
   // Password change
   const [newPassword, setNewPassword] = useState("");
@@ -226,7 +227,7 @@ export default function Settings() {
 
           <div className="settings-info-row">
             <span className="settings-label">Email</span>
-            <span className="settings-value">{user?.email}</span>
+            <span className="settings-value">{contactEmail || user?.email}</span>
           </div>
 
           <div className="settings-divider" />
@@ -297,6 +298,7 @@ export default function Settings() {
         </div>
 
         {/* ====== APPEARANCE ====== */}
+        <ChangeEmail onChanged={() => { setPasswordOtp(''); setOtpDestination(''); }} />
         <div className="card settings-card">
           <div className="settings-card-header">
             <div className="settings-card-icon purple">
