@@ -1,6 +1,8 @@
 import nodemailer from 'nodemailer'
 import { runtimeValue } from '../config/supabase.js'
 
+const WEBSITE_URL = 'https://hc-laundry.23-14327.workers.dev/'
+
 function requireValue(value, label) {
   if (!value) throw Object.assign(new Error(`${label} is not configured`), { status: 500 })
   return value
@@ -45,11 +47,13 @@ function brandedEmailHtml(subject, body) {
           <tr><td style="padding:32px">
             <h1 style="margin:0 0 20px;color:#172033;font-size:21px;line-height:1.35">${safeSubject}</h1>
             <div style="color:#46556d;font-size:14px;line-height:1.65">${lines}</div>
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:24px"><tr><td style="border-radius:8px;background:#1196cf"><a href="${WEBSITE_URL}" style="display:inline-block;padding:12px 18px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700">Visit H&amp;C Laundry</a></td></tr></table>
           </td></tr>
           <tr><td style="padding:0 32px"><div style="height:1px;background:#e5edf4;font-size:1px;line-height:1px">&nbsp;</div></td></tr>
           <tr><td style="padding:20px 32px 26px;color:#74839a;font-size:12px;line-height:1.55">
             <strong style="color:#52637c">Automated message</strong><br>
-            This email was generated automatically by H&amp;C Laundry. Please do not reply to this message.
+            This email was generated automatically by H&amp;C Laundry. Please do not reply to this message.<br>
+            Website: <a href="${WEBSITE_URL}" style="color:#0c80b7;text-decoration:underline">${WEBSITE_URL}</a>
           </td></tr>
         </table>
       </td></tr>
@@ -73,7 +77,7 @@ async function sendViaAppsScript({ relayUrl, relaySecret, to, subject, body, htm
 
 export async function sendEmail({ to, subject, body }) {
   if (!to || !subject || !body) throw Object.assign(new Error('Missing required fields'), { status: 400 })
-  const text = `${String(body).trim()}\n\n---\nThis is an automated email from H&C Laundry. Please do not reply to this message.`
+  const text = `${String(body).trim()}\n\nVisit H&C Laundry: ${WEBSITE_URL}\n\n---\nThis is an automated email from H&C Laundry. Please do not reply to this message.`
   const html = brandedEmailHtml(subject, body)
   const relayUrl = runtimeValue('GOOGLE_APPS_SCRIPT_EMAIL_URL')
   const relaySecret = runtimeValue('EMAIL_RELAY_SECRET')
