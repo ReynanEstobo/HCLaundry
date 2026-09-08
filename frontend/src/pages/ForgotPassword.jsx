@@ -22,7 +22,7 @@ export default function ForgotPassword() {
     try {
       await apiFetch('/api/auth/forgot-password/otp', { method: 'POST', body: JSON.stringify({ identifier }) })
       setCodeRequested(true)
-      toast.success('If the account has a contact email, a code was sent.')
+      toast.success('A verification code has been sent to your recovery email.')
     } catch (error) { toast.error(error.message) } finally { setLoading(false) }
   }
   async function submit(event) {

@@ -4,7 +4,9 @@ import { createHash, randomInt, timingSafeEqual } from 'node:crypto'
 import { sendEmail } from '../services/notificationService.js'
 
 async function identityFor(user) {
-  const { data: staff } = await getStaffProfile(user.id, user.email)
+  const { data: staff, error } = await getStaffProfile(user.id, user.email)
+  if (error) throw new Error('Unable to verify account status')
+  if (!staff) throw accountNotFound()
   return {
     user,
     staffId: staff?.id || null,
@@ -15,30 +17,33 @@ async function identityFor(user) {
   }
 }
 
+const accountNotFound = () => Object.assign(new Error('Account does not exist.'), { status: 404 })
+const literalPattern = value => value.replace(/[\\%_]/g, character => `\\${character}`)
+
+async function findActiveAccount(identifier, includeContactEmail = false) {
+  const value = String(identifier || '').trim()
+  if (!value) return null
+  const columns = value.includes('@')
+    ? (includeContactEmail ? ['email', 'contact_email'] : ['email'])
+    : [/^HC-(?:STAFF|ADMIN)-/i.test(value) ? 'staff_code' : 'username']
+  for (const column of columns) {
+    const { data, error } = await database.from('staff')
+      .select('id, auth_id, email, contact_email').is('deleted_at', null)
+      .ilike(column, literalPattern(value)).maybeSingle()
+    if (error) throw new Error('Unable to look up account')
+    if (data) return data
+  }
+  return null
+}
+
 export async function login({ identifier, email, password }) {
   const submittedIdentifier = String(identifier || email || '').trim()
   if (!submittedIdentifier || !password) throw Object.assign(new Error('Account ID or username and password are required'), { status: 400 })
-  let authEmail = submittedIdentifier
-  if (!submittedIdentifier.includes('@')) {
-    let staffQuery = database
-      .from('staff')
-      .select('email')
-      .is('deleted_at', null)
-    staffQuery = /^HC-(?:STAFF|ADMIN)-/i.test(submittedIdentifier)
-      ? staffQuery.eq('staff_code', submittedIdentifier.toUpperCase())
-      : staffQuery.ilike('username', submittedIdentifier)
-    const { data: staff, error: staffError } = await staffQuery.maybeSingle()
-    if (staffError) throw Object.assign(new Error(staffError.message), { status: 400 })
-    if (!staff?.email) throw Object.assign(new Error('Invalid staff ID or username.'), { status: 401 })
-    authEmail = staff.email
-  }
-  const { data, error } = await authClient.auth.signInWithPassword({ email: authEmail, password })
+  const account = await findActiveAccount(submittedIdentifier)
+  if (!account?.email) throw accountNotFound()
+  const { data, error } = await authClient.auth.signInWithPassword({ email: account.email, password })
   if (error) throw Object.assign(new Error(error.message), { status: 401 })
   const identity = await identityFor(data.user)
-  if (data.user.user_metadata?.staff_code && identity.role === 'unassigned') {
-    await authClient.auth.signOut()
-    throw Object.assign(new Error('This staff account is inactive. Contact an administrator.'), { status: 403 })
-  }
   return { session: data.session, ...identity }
 }
 
@@ -130,28 +135,24 @@ async function verifyPasswordOtp(identity, code) {
 }
 
 async function findResetAccount(identifier) {
-  const value = String(identifier || '').trim()
-  if (!value) return null
-  let query = database.from('staff').select('id, auth_id, email, contact_email, deleted_at').is('deleted_at', null)
-  query = value.includes('@') ? query.or(`email.eq.${value},contact_email.eq.${value}`) : /^HC-(?:STAFF|ADMIN)-/i.test(value) ? query.eq('staff_code', value.toUpperCase()) : query.ilike('username', value)
-  const { data, error } = await query.maybeSingle()
-  if (error) throw Object.assign(new Error(error.message), { status: 400 })
+  const data = await findActiveAccount(identifier, true)
   if (!data?.auth_id) return null
   const email = data.contact_email || (data.email?.endsWith('@accounts.hclaundry.local') ? null : data.email)
-  return email ? { user: { id: data.auth_id }, staffId: data.id, email } : null
+  if (!email) throw Object.assign(new Error('No recovery email is configured. Contact an administrator.'), { status: 400 })
+  return { user: { id: data.auth_id }, staffId: data.id, email }
 }
 
 export async function requestForgotPasswordOtp({ identifier }) {
   const account = await findResetAccount(identifier)
-  // Always return the same response to avoid leaking whether an account exists.
-  if (account) await issuePasswordOtp({ userId: account.user.id, staffId: account.staffId, email: account.email })
-  return { success: true, message: 'If the account and a contact email exist, a verification code has been sent.' }
+  if (!account) throw accountNotFound()
+  await issuePasswordOtp({ userId: account.user.id, staffId: account.staffId, email: account.email })
+  return { success: true, message: 'A verification code has been sent to your recovery email.' }
 }
 
 export async function resetForgottenPassword({ identifier, otp, newPassword }) {
   if (!newPassword || newPassword.length < 10) throw Object.assign(new Error('Your new password must contain at least 10 characters.'), { status: 400 })
   const account = await findResetAccount(identifier)
-  if (!account) throw Object.assign(new Error('Unable to verify this account. Check the identifier or contact an administrator.'), { status: 400 })
+  if (!account) throw accountNotFound()
   const challenge = await verifyPasswordOtp(account, otp)
   const { error } = await database.auth.admin.updateUserById(account.user.id, { password: newPassword })
   if (error) throw Object.assign(new Error(error.message), { status: 400 })

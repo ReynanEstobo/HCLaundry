@@ -68,7 +68,7 @@ expected outcome, actual outcome, and evidence (screenshot/order number).
 ## 3. Authentication and session controls
 
 - [ ] With an invalid password, login must fail without entering the dashboard.
-- [ ] With a deleted/recycled account, login must fail.
+- [ ] With a deleted/recycled account, login by username, account ID, or login email must fail with "Account does not exist." No session is returned.
 - [ ] With a valid email and password, login must open the correct dashboard.
 - [ ] Sign out, refresh, then revisit a protected URL such as
   `/dashboard/orders`. It must redirect to `/login`.
@@ -119,7 +119,9 @@ safe mechanism.
 ### Forgot password (logged out)
 
 - [ ] On `/forgot-password`, submit an unknown username/email/account ID.
-  The page must use the same non-enumerating success message as a known account.
+  The page must show "Account does not exist." Repeat for a recycled account's username, account ID, login email, and recovery email; no OTP should be sent.
+- [ ] Request a recovery code, then delete the account before using it. Password reset must show "Account does not exist."
+- [ ] An account signed in before deletion cannot make protected API requests afterward. Restoring the account permits normal login again.
 - [ ] Submit a known account with a contact email. Confirm one OTP email,
   branded H&C layout, masked destination in the UI, and no secret in browser
   logs.
