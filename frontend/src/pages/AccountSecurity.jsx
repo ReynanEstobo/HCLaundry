@@ -2,8 +2,8 @@ import { CheckCircle2, Eye, EyeOff, KeyRound, LockKeyhole, MailCheck, ShieldChec
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { supabase } from '../lib/supabase'
 import { apiFetch } from '../services/api/client'
+import LoadingButton from '../components/LoadingButton'
 
 function PasswordField({ label, value, onChange, visible, onToggle, placeholder }) {
   return <div className="login-field">
@@ -49,10 +49,17 @@ export default function AccountSecurity() {
     if (!destination) return toast.error('Send and verify an email code first.')
     if (!/^\d{6}$/.test(otp)) return toast.error('Enter the 6-digit verification code.')
     setSaving(true)
-    const { error } = await supabase.auth.updateUser({ password: newPassword, otp })
-    setSaving(false)
-    if (error) return toast.error(error.message)
-    setPasswordChanged(true)
+    try {
+      await apiFetch('/api/auth/password', {
+        method: 'PATCH',
+        body: JSON.stringify({ newPassword, otp }),
+      })
+      setPasswordChanged(true)
+    } catch (error) {
+      toast.error(error.message || 'Unable to change password.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const flip = field => () => setVisible(state => ({ ...state, [field]: !state[field] }))
@@ -64,9 +71,9 @@ export default function AccountSecurity() {
       </div>
       <div className="account-security-steps" aria-label="Password change steps"><span className="active"><b>1</b> Request code</span><span className={destination ? 'active' : ''}><b>2</b> Verify email</span><span><b>3</b> New password</span></div>
       <form onSubmit={submit} className="login-form account-security-form">
-        <button type="button" className="account-security-code-button" onClick={requestCode} disabled={sendingCode}>
-          <MailCheck size={16} /> {sendingCode ? 'Sending verification code…' : destination ? 'Resend verification code' : 'Send verification code'}
-        </button>
+        <LoadingButton type="button" className="account-security-code-button" onClick={requestCode} loading={sendingCode} loadingLabel="Sending verification code…">
+          <MailCheck size={16} /> {destination ? 'Resend verification code' : 'Send verification code'}
+        </LoadingButton>
         {destination && <div className="account-security-notice"><MailCheck size={16} /><span>Code sent to <strong>{destination}</strong>. It expires in 10 minutes.</span></div>}
         <div className="login-field" style={{ marginTop: 16 }}>
           <label>Email verification code</label>
@@ -77,7 +84,7 @@ export default function AccountSecurity() {
         </div>
         <PasswordField label="New password" value={newPassword} onChange={setNewPassword} visible={visible.next} onToggle={flip('next')} placeholder="At least 10 characters" />
         <PasswordField label="Confirm new password" value={confirmation} onChange={setConfirmation} visible={visible.confirmation} onToggle={flip('confirmation')} placeholder="Re-enter your new password" />
-        <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Changing password…' : <><LockKeyhole size={16} /> Change password</>}</button>
+        <LoadingButton type="submit" className="btn btn-primary" loading={saving} loadingLabel="Changing password…"><LockKeyhole size={16} /> Change password</LoadingButton>
       </form>
     </section>
     {passwordChanged && <div className="modal-overlay account-security-success-overlay" role="presentation">

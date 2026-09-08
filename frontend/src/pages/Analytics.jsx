@@ -30,6 +30,7 @@ import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { generateAiForecast, generateDecisionSupport } from "../services/geminiService";
 import { LoadingVisual, PageError, PageLoader } from "../components/AsyncState";
+import LoadingButton from '../components/LoadingButton'
 
 // ─── Custom tooltip ────────────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
@@ -1081,15 +1082,17 @@ Rules:
           <span>Forecast: {describeAiSource(forecastAiMeta)} · Last cached: {formatAiCacheTime(forecastAiMeta.savedAt)}</span>
           <span>Decision support: {describeAiSource(insightAiMeta)} · Last cached: {formatAiCacheTime(insightAiMeta.savedAt)}</span>
         </div>
-        <button
+        <LoadingButton
           type="button"
           className="analytics-ai-regenerate"
           onClick={regenerateAiOutputs}
           disabled={manualAiRefresh || forecastLoading || aiLoading || loading}
+          loading={manualAiRefresh}
+          loadingLabel="Regenerating..."
         >
           <RefreshCw size={15} className={manualAiRefresh ? "analytics-ai-refreshing" : ""} />
           {manualAiRefresh ? "Regenerating…" : "Regenerate AI outputs"}
-        </button>
+        </LoadingButton>
       </section>
 
       {/* CHARTS */}

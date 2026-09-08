@@ -10,6 +10,7 @@ import { apiFetch } from "../services/api/client";
 import { useRealtime } from "../lib/useRealtime";
 import { PageError, PageLoader } from "../components/AsyncState";
 import ConfirmDialog from "../components/ConfirmDialog";
+import LoadingButton from "../components/LoadingButton";
 
 // ─────────────────────────────────────
 // ROLES
@@ -741,22 +742,20 @@ export default function Staff() {
                 <button
                   type="button"
                   className="btn btn-secondary"
+                  disabled={saving}
                   onClick={() => setShowModal(false)}
                 >
                   Cancel
                 </button>
 
-                <button
+                <LoadingButton
                   type="submit"
                   className="btn btn-primary"
-                  disabled={saving}
+                  loading={saving}
+                  loadingLabel={editing ? "Updating…" : "Creating…"}
                 >
-                  {saving
-                    ? "Saving..."
-                    : editing
-                      ? "Update Staff"
-                      : "Create Account"}
-                </button>
+                  {editing ? "Update Staff" : "Create Account"}
+                </LoadingButton>
               </div>
             </form>
           </div>

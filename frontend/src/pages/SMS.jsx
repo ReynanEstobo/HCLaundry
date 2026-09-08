@@ -1,10 +1,11 @@
-import { CheckCircle, Loader, Mail } from "lucide-react";
+import { CheckCircle, Mail } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { apiFetch } from "../services/api/client";
 import { useRealtime } from "../lib/useRealtime";
 import { PageError, PageLoader } from "../components/AsyncState";
+import LoadingButton from "../components/LoadingButton";
 import { compareOrdersForList } from "../utils/orderListPriority";
 
 export default function Notifications() {
@@ -263,19 +264,19 @@ Thank you for choosing H&C Laundry!
                 />
               </div>
 
-              <button
+              <LoadingButton
                 className="btn btn-primary"
                 type="submit"
-                disabled={sending}
+                loading={sending}
+                loadingLabel="Sending…"
                 style={{
                   width: "100%",
                   justifyContent: "center",
                 }}
               >
                 <Mail size={16} />
-
-                {sending ? "Sending..." : "Send Email"}
-              </button>
+                Send Email
+              </LoadingButton>
             </form>
           </div>
 
@@ -429,26 +430,20 @@ Thank you for choosing H&C Laundry!
                           </td>
 
                           <td>
-                            <button
+                            <LoadingButton
                               className="btn btn-sm btn-primary"
                               onClick={() => quickEmailReady(order)}
-                              disabled={
-                                !order.customers?.email ||
-                                emailSending[order.id]
-                              }
+                              disabled={!order.customers?.email}
+                              loading={emailSending[order.id]}
+                              loadingLabel="Sending…"
                               title={
                                 order.customers?.email
                                   ? "Send email"
                                   : "No email address"
                               }
                             >
-                              {emailSending[order.id] ? (
-                                <Loader size={14} className="spin" />
-                              ) : (
-                                <Mail size={14} />
-                              )}
-                              Email
-                            </button>
+                              <Mail size={14} /> Email
+                            </LoadingButton>
                           </td>
                         </tr>
                       ))

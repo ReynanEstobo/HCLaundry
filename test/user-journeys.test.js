@@ -101,6 +101,12 @@ test('security journey: protected staff endpoints reject a visitor without a ses
   }
 })
 
+test('security journey: an empty OTP request is valid JSON transport and reaches authentication', async () => {
+  const result = await api('auth/password/otp', { method: 'POST' })
+  assert.equal(result.response.status, 401)
+  assert.equal(result.body.error, 'Authentication required')
+})
+
 test('security journey: rate limiter blocks requests after the configured limit', async () => {
   const storage = new Map()
   const limiter = new RateLimiter({

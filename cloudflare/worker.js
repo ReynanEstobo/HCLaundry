@@ -37,7 +37,15 @@ const json = (payload, status = 200) => secure(new Response(JSON.stringify(paylo
 async function body(request) {
   const contentLength = Number(request.headers.get('content-length') || 0)
   if (contentLength > 64 * 1024) throw Object.assign(new Error('Request body is too large.'), { status: 413 })
-  try { return await request.json() } catch { throw Object.assign(new Error('Invalid JSON body'), { status: 400 }) }
+  try {
+    const raw = await request.text()
+    // Several authenticated endpoints, such as requesting a password OTP,
+    // deliberately need no client payload. An empty request body is valid and
+    // must not be treated as malformed JSON.
+    return raw.trim() ? JSON.parse(raw) : {}
+  } catch {
+    throw Object.assign(new Error('Invalid JSON body'), { status: 400 })
+  }
 }
 
 const ratePolicies = {

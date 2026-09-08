@@ -18,6 +18,7 @@ import { useRealtime } from "../lib/useRealtime";
 import { restockBranchInventory } from "../services/api/operationsApi";
 import { PageError, PageLoader } from "../components/AsyncState";
 import ConfirmDialog from "../components/ConfirmDialog";
+import LoadingButton from "../components/LoadingButton";
 
 const BRANCHES = [
   "Main - Brgy 7",
@@ -35,6 +36,8 @@ export default function Inventory() {
   const [showRestock, setShowRestock] = useState(null);
   const [itemToDelete, setItemToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [savingItem, setSavingItem] = useState(false);
+  const [restocking, setRestocking] = useState(false);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState(
@@ -169,6 +172,7 @@ export default function Inventory() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (savingItem) return;
     const payload = {
       ...form,
       current_stock: parseFloat(form.current_stock) || 0,
@@ -178,6 +182,7 @@ export default function Inventory() {
       category_id: form.category_id || null,
     };
 
+    setSavingItem(true);
     let error;
     if (editing) {
       ({ error } = await supabase
@@ -200,17 +205,23 @@ export default function Inventory() {
         });
       }
     }
-    if (error) return toast.error(error.message);
+    if (error) {
+      setSavingItem(false);
+      return toast.error(error.message);
+    }
     toast.success(editing ? "Item updated!" : "Item added!");
     setShowModal(false);
-    loadData(true);
+    await loadData(true);
+    setSavingItem(false);
   }
 
   async function handleRestock(e) {
     e.preventDefault();
+    if (restocking) return;
     const qty = parseFloat(restockQty);
     if (!qty || qty <= 0) return toast.error("Enter a valid quantity");
 
+    setRestocking(true);
     try {
       await restockBranchInventory({
         itemId: showRestock.id,
@@ -219,7 +230,9 @@ export default function Inventory() {
         supplier: restockSupplier || null,
       });
     } catch (error) {
-      return toast.error(error.message);
+      toast.error(error.message);
+      setRestocking(false);
+      return;
     }
 
     toast.success("Stock restocked!");
@@ -227,7 +240,8 @@ export default function Inventory() {
     setRestockQty("");
     setRestockCost("");
     setRestockSupplier("");
-    loadData(true);
+    await loadData(true);
+    setRestocking(false);
   }
 
   async function deleteItem() {
@@ -668,13 +682,14 @@ export default function Inventory() {
                 <button
                   type="button"
                   className="btn btn-secondary"
+                  disabled={savingItem}
                   onClick={() => setShowModal(false)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <LoadingButton type="submit" className="btn btn-primary" loading={savingItem} loadingLabel={editing ? "Updating…" : "Adding…"}>
                   {editing ? "Update" : "Add Item"}
-                </button>
+                </LoadingButton>
               </div>
             </form>
           </div>
@@ -691,7 +706,7 @@ export default function Inventory() {
           >
             <div className="modal-header">
               <h3>Restock: {showRestock.name}</h3>
-              <button className="btn-icon" onClick={() => setShowRestock(null)}>
+              <button className="btn-icon" disabled={restocking} onClick={() => setShowRestock(null)}>
                 <X size={20} />
               </button>
             </div>
@@ -747,13 +762,14 @@ export default function Inventory() {
                 <button
                   type="button"
                   className="btn btn-secondary"
+                  disabled={restocking}
                   onClick={() => setShowRestock(null)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-success">
+                <LoadingButton type="submit" className="btn btn-success" loading={restocking} loadingLabel="Restocking…">
                   <RefreshCw size={16} /> Restock
-                </button>
+                </LoadingButton>
               </div>
             </form>
           </div>

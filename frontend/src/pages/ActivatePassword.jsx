@@ -2,6 +2,7 @@ import { Eye, EyeOff, LockKeyhole, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import LoadingButton from '../components/LoadingButton'
 import { supabase } from '../lib/supabase'
 
 export default function ActivatePassword() {
@@ -17,11 +18,16 @@ export default function ActivatePassword() {
     if (password.length < 10) return toast.error('Use at least 10 characters for your new password.')
     if (password !== confirmPassword) return toast.error('Passwords do not match.')
     setSaving(true)
-    const { error } = await supabase.auth.updateUser({ password })
-    setSaving(false)
-    if (error) return toast.error(error.message)
-    toast.success('Password created. Your account is now active.')
-    navigate('/dashboard', { replace: true })
+    try {
+      const { error } = await supabase.auth.updateUser({ password })
+      if (error) throw new Error(error.message)
+      toast.success('Password created. Your account is now active.')
+      navigate('/dashboard', { replace: true })
+    } catch (error) {
+      toast.error(error.message || 'Unable to activate the account.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -57,7 +63,7 @@ export default function ActivatePassword() {
                   </button>
                 </div>
               </div>
-              <button type="submit" disabled={saving} className="login-submit-btn">{saving ? 'Activating…' : 'Activate account'}</button>
+              <LoadingButton type="submit" className="login-submit-btn" loading={saving} loadingLabel="Activating…">Activate account</LoadingButton>
             </form>
           </div>
         </div>

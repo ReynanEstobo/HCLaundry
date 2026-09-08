@@ -19,6 +19,7 @@ import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { apiFetch } from "../services/api/client";
+import LoadingButton from "../components/LoadingButton";
 
 export default function Settings() {
   const { user } = useAuth();
@@ -32,6 +33,7 @@ export default function Settings() {
   const [otpDestination, setOtpDestination] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
   const [passwordChanged, setPasswordChanged] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
 
   const requestPasswordOtp = async () => {
     setPwLoading(true);
@@ -153,48 +155,46 @@ export default function Settings() {
 
     setPwLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-        otp: passwordOtp,
+      await apiFetch('/api/auth/password', {
+        method: 'PATCH',
+        body: JSON.stringify({ newPassword, otp: passwordOtp }),
       });
-      if (error) {
-        toast.error(error.message);
-      } else {
-        setNewPassword("");
-        setConfirmPassword("");
-        setPasswordOtp("");
-        setOtpDestination("");
-        setPasswordChanged(true);
-      }
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordOtp("");
+      setOtpDestination("");
+      setPasswordChanged(true);
     } catch (err) {
-      toast.error("Failed to update password");
+      toast.error(err.message || "Failed to update password");
     }
     setPwLoading(false);
   };
 
   const handleSaveBusinessSettings = async () => {
-    if (!settings?.id) return;
-
-    const { error } = await supabase
-      .from("settings")
-      .update({
-        darkmode: darkMode,
-        notifications,
-        bundlekg: Number(bundleKg),
-        bundleprice: Number(bundlePrice),
-        addonprice: Number(addonPrice),
-        excesskgprice: Number(excessKgPrice),
-        default_processing_minutes: Number(defaultProcessingMinutes),
-        eta_buffer_minutes: Number(etaBufferMinutes),
-        eta_min_completed_orders: Number(etaMinCompletedOrders),
-        status_undo_seconds: Number(statusUndoSeconds),
-      })
-      .eq("id", settings.id);
-
-    if (error) {
-      toast.error("Failed to save settings");
-    } else {
+    if (!settings?.id || settingsSaving) return;
+    setSettingsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("settings")
+        .update({
+          darkmode: darkMode,
+          notifications,
+          bundlekg: Number(bundleKg),
+          bundleprice: Number(bundlePrice),
+          addonprice: Number(addonPrice),
+          excesskgprice: Number(excessKgPrice),
+          default_processing_minutes: Number(defaultProcessingMinutes),
+          eta_buffer_minutes: Number(etaBufferMinutes),
+          eta_min_completed_orders: Number(etaMinCompletedOrders),
+          status_undo_seconds: Number(statusUndoSeconds),
+        })
+        .eq("id", settings.id);
+      if (error) throw error;
       toast.success("Settings updated!");
+    } catch (error) {
+      toast.error("Failed to save settings");
+    } finally {
+      setSettingsSaving(false);
     }
   };
 
@@ -235,9 +235,9 @@ export default function Settings() {
 
           <h4 className="settings-subtitle">Change Password</h4>
           <form onSubmit={handlePasswordChange}>
-            <button type="button" className="btn btn-secondary" onClick={requestPasswordOtp} disabled={pwLoading} style={{ width: '100%', marginBottom: 14 }}>
+            <LoadingButton type="button" className="btn btn-secondary" onClick={requestPasswordOtp} loading={pwLoading} loadingLabel="Sending code…" style={{ width: '100%', marginBottom: 14 }}>
               <MailCheck size={16} /> {otpDestination ? 'Resend verification code' : 'Send verification code'}
-            </button>
+            </LoadingButton>
             {otpDestination && <div className="account-security-notice" style={{ marginBottom: 14 }}><MailCheck size={16} /><span>Code sent to <strong>{otpDestination}</strong>. It expires in 10 minutes.</span></div>}
             <div className="form-group">
               <label>Email Verification Code</label>
@@ -292,25 +292,9 @@ export default function Settings() {
                 </div>
               </div>
             </div>
-            <button
-              className="btn btn-primary"
-              type="submit"
-              disabled={pwLoading}
-            >
-              {pwLoading ? (
-                <>
-                  <div
-                    className="spinner"
-                    style={{ width: 16, height: 16, borderWidth: 2 }}
-                  />{" "}
-                  Updating...
-                </>
-              ) : (
-                <>
-                  <Lock size={15} /> Update Password
-                </>
-              )}
-            </button>
+            <LoadingButton className="btn btn-primary" type="submit" loading={pwLoading} loadingLabel="Updating password…">
+              <Lock size={15} /> Update Password
+            </LoadingButton>
           </form>
         </div>
 
@@ -447,13 +431,15 @@ export default function Settings() {
             </div>
           </div>
 
-          <button
+          <LoadingButton
             className="btn btn-primary"
+            loading={settingsSaving}
+            loadingLabel="Saving…"
             onClick={handleSaveBusinessSettings}
             style={{ marginTop: 12 }}
           >
             <Save size={15} /> Save Pricing
-          </button>
+          </LoadingButton>
         </div>
 
         {/* ====== ETA / PROCESS TIMES ====== */}
@@ -544,13 +530,15 @@ export default function Settings() {
             </span>
           </div>
 
-          <button
+          <LoadingButton
             className="btn btn-primary"
+            loading={settingsSaving}
+            loadingLabel="Saving…"
             onClick={handleSaveBusinessSettings}
             style={{ marginTop: 12 }}
           >
             <Save size={15} /> Save ETA Settings
-          </button>
+          </LoadingButton>
         </div>
       </div>
       {passwordChanged && <div className="modal-overlay account-security-success-overlay" role="presentation">

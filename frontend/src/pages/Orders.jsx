@@ -24,6 +24,7 @@ import { sendEmail, sendSms } from "../services/api/notificationApi";
 import { cancelBranchOrder, createBranchOrder, getVisibleCustomers, lookupCustomerByPhone, transitionBranchOrder } from "../services/api/operationsApi";
 import { useAuth } from "../context/AuthContext";
 import { PageError, PageLoader } from "../components/AsyncState";
+import LoadingButton from "../components/LoadingButton";
 import { compareOrdersForList } from "../utils/orderListPriority";
 
 const PROCESS_FLOW = [
@@ -179,6 +180,7 @@ export default function Orders() {
   const [correctionTarget, setCorrectionTarget] = useState("");
   const [correctionReason, setCorrectionReason] = useState("");
   const [tableLoading, setTableLoading] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
   const hasLoadedOrders = useRef(false);
   const paginationRefresh = useRef(false);
 
@@ -439,6 +441,7 @@ export default function Orders() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (savingOrder) return;
     if (!form.customer_phone.trim())
       return toast.error("Phone number is required");
     if (!form.customer_name.trim())
@@ -503,6 +506,7 @@ export default function Orders() {
       ...(!editing && { status: "received" }),
     };
 
+    setSavingOrder(true);
     let error, orderData;
     if (editing) {
       ({ error } = await supabase
@@ -541,7 +545,10 @@ export default function Orders() {
       }
     }
 
-    if (error) return toast.error(error.message);
+    if (error) {
+      setSavingOrder(false);
+      return toast.error(error.message);
+    }
 
     // Track stage start time for new orders
     if (false && !editing && orderData) {
@@ -640,7 +647,8 @@ export default function Orders() {
 
     toast.success(editing ? "Order updated!" : "Order created!");
     setShowModal(false);
-    loadData(true);
+    await loadData(true);
+    setSavingOrder(false);
   }
 
   async function completePaymentAndRelease() {
@@ -1795,13 +1803,14 @@ export default function Orders() {
                 <button
                   type="button"
                   className="btn btn-secondary"
+                  disabled={savingOrder}
                   onClick={() => setShowModal(false)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <LoadingButton type="submit" className="btn btn-primary" loading={savingOrder} loadingLabel={editing ? "Updating…" : "Creating…"}>
                   {editing ? "Update Order" : "Create Order"}
-                </button>
+                </LoadingButton>
               </div>
             </form>
           </div>
@@ -1854,16 +1863,19 @@ export default function Orders() {
             <div className="order-modal-footer">
               <button
                 className="btn btn-secondary"
+                disabled={updatingOrderId === selectedOrder?.id}
                 onClick={() => setShowPaymentModal(false)}
               >
                 Cancel
               </button>
-              <button
+              <LoadingButton
                 className="btn btn-primary"
+                loading={updatingOrderId === selectedOrder?.id}
+                loadingLabel="Releasing…"
                 onClick={completePaymentAndRelease}
               >
                 Confirm & Release
-              </button>
+              </LoadingButton>
             </div>
           </div>
         </div>

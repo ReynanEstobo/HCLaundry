@@ -8,6 +8,7 @@ import { useAuth } from "../context/AuthContext";
 import { getVisibleCustomers, registerBranchCustomer } from "../services/api/operationsApi";
 import { PageError, PageLoader } from "../components/AsyncState";
 import ConfirmDialog from "../components/ConfirmDialog";
+import LoadingButton from "../components/LoadingButton";
 
 const BRANCHES = [
   "Main - Brgy 7",
@@ -26,6 +27,7 @@ export default function Customers() {
   const [customerToDelete, setCustomerToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     name: "",
@@ -109,26 +111,29 @@ export default function Customers() {
     if (isAdmin && !form.branch)
       return toast.error("Please assign this customer to a branch");
 
-    let error;
-    if (editing) {
-      ({ error } = await supabase
-        .from("customers")
-        .update(form)
-        .eq("id", editing.id));
-    } else {
-      try {
+    setSaving(true);
+    try {
+      let error;
+      if (editing) {
+        ({ error } = await supabase
+          .from("customers")
+          .update(form)
+          .eq("id", editing.id));
+      } else {
         await registerBranchCustomer({
           ...form,
           ...(isAdmin ? { branch: form.branch } : {}),
         });
-      } catch (registerError) {
-        error = { message: registerError.message };
       }
+      if (error) throw error;
+      toast.success(editing ? "Customer updated!" : "Customer added!");
+      setShowModal(false);
+      await loadCustomers(true);
+    } catch (error) {
+      toast.error(error.message || "Unable to save the customer.");
+    } finally {
+      setSaving(false);
     }
-    if (error) return toast.error(error.message);
-    toast.success(editing ? "Customer updated!" : "Customer added!");
-    setShowModal(false);
-    loadCustomers(true);
   }
 
   async function deleteCustomer() {
@@ -341,7 +346,7 @@ export default function Customers() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{editing ? "Edit Customer" : "Add Customer"}</h3>
-              <button className="btn-icon" onClick={() => setShowModal(false)}>
+              <button className="btn-icon" disabled={saving} onClick={() => setShowModal(false)}>
                 <X size={20} />
               </button>
             </div>
@@ -421,13 +426,14 @@ export default function Customers() {
                 <button
                   type="button"
                   className="btn btn-secondary"
+                  disabled={saving}
                   onClick={() => setShowModal(false)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <LoadingButton type="submit" className="btn btn-primary" loading={saving} loadingLabel={editing ? "Updating…" : "Adding…"}>
                   {editing ? "Update" : "Add Customer"}
-                </button>
+                </LoadingButton>
               </div>
             </form>
           </div>
