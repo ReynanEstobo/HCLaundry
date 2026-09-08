@@ -481,10 +481,10 @@ export default function LandingPage() {
           <div className="landing-logo">
             <img
               src="/assets/Rectangle.png"
-              alt="H&C Laundry"
+              alt="I&C Laundry"
               className="landing-logo-img-nav"
             />
-            <span>H&C Laundry</span>
+            <span>I&C Laundry</span>
           </div>
           <div className="landing-nav-links">
             <a href="#home" onClick={(e) => scrollToSection(e, "home")}>
@@ -527,7 +527,7 @@ export default function LandingPage() {
             </div>
             <h1>
               Simplify Your Life with{" "}
-              <span className="text-highlight">H&C Laundry</span> Service
+              <span className="text-highlight">I&C Laundry</span> Service
             </h1>
             <p>
               A modern multi-branch laundry management platform designed to
@@ -555,7 +555,7 @@ export default function LandingPage() {
           >
             <div className="landing-hero-image-bg" />
             <div className="landing-hero-image-ring" />
-            <img src="/assets/image%2046.png" alt="H&C Laundry Service" />
+            <img src="/assets/image%2046.png" alt="I&C Laundry Service" />
             <div className="hero-float-badge hero-float-badge-1">
               <Star size={16} />
               <span>Top Rated</span>
@@ -660,7 +660,7 @@ export default function LandingPage() {
                 <Package size={18} className="track-input-icon" />
                 <input
                   type="text"
-                  placeholder="Enter order number (e.g. HC-20260327-1234)"
+                  placeholder="Enter order number (e.g. IC-20260327-1234)"
                   value={trackOrderId}
                   onChange={(e) => setTrackOrderId(e.target.value)}
                   required
@@ -945,11 +945,11 @@ export default function LandingPage() {
             <div className="landing-logo">
               <img
                 src="/assets/Rectangle.png"
-                alt="H&C Laundry"
+                alt="I&C Laundry"
                 className="landing-logo-img"
               />
               <span>
-                <strong>H&C</strong> Laundry
+                <strong>I&C</strong> Laundry
               </span>
             </div>
             <p>
@@ -980,7 +980,7 @@ export default function LandingPage() {
         <div className="landing-footer-bottom">
           <div className="landing-container">
             <p>
-              Copyright &copy; {new Date().getFullYear()} H&C Laundry. All rights
+              Copyright &copy; {new Date().getFullYear()} I&C Laundry. All rights
               reserved
             </p>
           </div>

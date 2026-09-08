@@ -1,4 +1,4 @@
-# Switch automated mail to `hclaundryhub@gmail.com`
+# Configure I&C Laundry automated mail with `hclaundryhub@gmail.com`
 
 This runbook changes the sender of production OTPs, order notifications, manual
 emails, and public contact-form messages. Do this during a quiet period because
@@ -7,7 +7,7 @@ cutover.
 
 ## What changes and what does not
 
-- The Gmail sender and public contact address become `hclaundryhub@gmail.com`.
+- The verified Gmail mailbox remains `hclaundryhub@gmail.com`; its customer-facing sender name is **I&C Laundry**.
 - The public website and Notifications page show the new address.
 - Existing customer email addresses, staff contact emails, and internal
   `@accounts.hclaundry.local` login identities are not changed. They represent
@@ -20,7 +20,7 @@ cutover.
 
 1. Sign into `hclaundryhub@gmail.com`.
 2. Enable Google two-step verification.
-3. Create a Google App Password named `H&C Laundry local SMTP`. Keep the
+3. Create a Google App Password named `I&C Laundry local SMTP`. Keep the
    16-character value private. It is only for local Node testing; it is not
    used by Cloudflare Workers.
 4. Do not revoke the old sender's app password or relay yet.
@@ -85,7 +85,7 @@ deployment completed. Secrets set in Cloudflare are preserved across deploys.
 
 1. Use the production **Notifications** page to email a test inbox.
 2. Check the received message's **From** and **Reply-To** values. Both should
-   be `hclaundryhub@gmail.com` (the display name should be H&C Laundry).
+   be `hclaundryhub@gmail.com` (the display name should be I&C Laundry).
 3. Request one password-reset OTP for a test account; confirm delivery and the
    branded template.
 4. Create a UAT order with a test email and move it to Ready; confirm the

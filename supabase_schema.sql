@@ -1,5 +1,5 @@
 -- ============================================
--- H&C LAUNDRY - Supabase Database Schema
+-- I&C LAUNDRY - Supabase Database Schema
 -- Run this in Supabase SQL Editor
 -- ============================================
 
@@ -200,7 +200,7 @@ CREATE POLICY "Public read service_types for tracking" ON service_types FOR SELE
 CREATE OR REPLACE FUNCTION generate_order_number()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.order_number := 'HC-' || TO_CHAR(NOW(), 'YYYYMMDD') || '-' || LPAD(FLOOR(RANDOM() * 10000)::TEXT, 4, '0');
+  NEW.order_number := 'IC-' || TO_CHAR(NOW(), 'YYYYMMDD') || '-' || LPAD(FLOOR(RANDOM() * 10000)::TEXT, 4, '0');
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

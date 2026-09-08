@@ -6,7 +6,7 @@ import { authenticate } from '../backend/middleware/authenticate.js'
 
 test('Recycle Bin accounts cannot log in, recover passwords, or reuse sessions', async t => {
   const row = { id: 'staff-id', auth_id: 'auth-id', email: 'legacy@example.com', contact_email: 'recovery@example.com',
-    username: 'staff.user', staff_code: 'HC-STAFF-ABC12345', role: 'staff', deleted_at: '2026-09-09', branch_id: 'main' }
+    username: 'staff.user', staff_code: 'IC-STAFF-ABC12345', role: 'staff', deleted_at: '2026-09-09', branch_id: 'main' }
   let signIns = 0
   const originalFrom = database.from
   const authDescriptor = Object.getOwnPropertyDescriptor(authClient, 'auth')

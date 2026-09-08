@@ -18,7 +18,7 @@ function testEnv({ allowed = true } = {}) {
 }
 
 async function api(path, { method = 'GET', body, headers = {} } = {}) {
-  const response = await worker.fetch(new Request(`https://test.hclaundry.local/api/${path}`, {
+  const response = await worker.fetch(new Request(`https://test.iclaundry.local/api/${path}`, {
     method,
     headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -68,7 +68,7 @@ test('visitor journey: malformed, oversized, and unknown API requests fail safel
   assert.equal(blankTracking.response.status, 400)
   assert.equal(blankTracking.body.error, 'Tracking number is required')
 
-  const oversizedRequest = new Request('https://test.hclaundry.local/api/public/contact', {
+  const oversizedRequest = new Request('https://test.iclaundry.local/api/public/contact', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Content-Length': '65537' },
     body: '{}',
@@ -249,7 +249,7 @@ test('administrator journey: a new administrator has no branch scope and must ha
   assert.equal(inserted.contact_email, 'new.admin@example.com')
   assert.equal(inserted.branch, null)
   assert.equal(inserted.branch_id, null)
-  assert.match(result.credentials.staffCode, /^HC-ADMIN-[A-F0-9]{8}$/)
+  assert.match(result.credentials.staffCode, /^IC-ADMIN-[A-F0-9]{8}$/)
   assert.equal(result.credentials.role, 'admin')
   assert.equal(result.credentials.branch, null)
 })

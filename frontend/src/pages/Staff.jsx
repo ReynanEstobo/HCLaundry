@@ -781,7 +781,7 @@ export default function Staff() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => navigator.clipboard?.writeText(`H&C Laundry\nAccount ID: ${issuedCredentials.staffCode}\nRole: ${issuedCredentials.role === "admin" ? "Administrator" : "Staff"}\nUsername: ${issuedCredentials.username}\nTemporary password: ${issuedCredentials.temporaryPassword}${issuedCredentials.branch ? `\nBranch: ${issuedCredentials.branch}` : ""}`).then(() => toast.success("Credentials copied."))}>Copy credentials</button>
+              <button className="btn btn-secondary" onClick={() => navigator.clipboard?.writeText(`I&C Laundry\nAccount ID: ${issuedCredentials.staffCode}\nRole: ${issuedCredentials.role === "admin" ? "Administrator" : "Staff"}\nUsername: ${issuedCredentials.username}\nTemporary password: ${issuedCredentials.temporaryPassword}${issuedCredentials.branch ? `\nBranch: ${issuedCredentials.branch}` : ""}`).then(() => toast.success("Credentials copied."))}>Copy credentials</button>
               <button className="btn btn-primary" onClick={() => setIssuedCredentials(null)}>I saved them</button>
             </div>
           </div>

@@ -1,4 +1,5 @@
-const SESSION_KEY = 'hc-laundry-session'
+const SESSION_KEY = 'ic-laundry-session'
+const LEGACY_SESSION_KEY = 'hc-laundry-session'
 const resourcePaths = {
   customers: '/api/customers', orders: '/api/orders', inventory_items: '/api/inventory/items',
   inventory_categories: '/api/inventory/categories', inventory_usage_log: '/api/inventory/usage',
@@ -7,10 +8,14 @@ const resourcePaths = {
 }
 
 export function getStoredSession() {
-  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') } catch { return null }
+  try {
+    const session = JSON.parse(localStorage.getItem(SESSION_KEY) || localStorage.getItem(LEGACY_SESSION_KEY) || 'null')
+    if (session && !localStorage.getItem(SESSION_KEY)) localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+    return session
+  } catch { return null }
 }
 export function storeSession(session) { localStorage.setItem(SESSION_KEY, JSON.stringify(session)) }
-export function clearSession() { localStorage.removeItem(SESSION_KEY) }
+export function clearSession() { localStorage.removeItem(SESSION_KEY); localStorage.removeItem(LEGACY_SESSION_KEY) }
 
 export async function apiFetch(path, options = {}) {
   const session = getStoredSession()

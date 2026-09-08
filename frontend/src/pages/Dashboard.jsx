@@ -98,7 +98,8 @@ export default function Dashboard() {
         );
 
         data.push({
-          label: format(date, "EEE"),
+          label: format(date, "EEE, MMM d"),
+          fullDate: format(date, "EEEE, MMMM d, yyyy"),
           orders: dayOrders.length,
           revenue: dayOrders.reduce((s, o) => s + Number(o.total_price), 0),
         });
@@ -115,6 +116,7 @@ export default function Dashboard() {
 
         data.push({
           label: format(date, "MMM d"),
+          fullDate: format(date, "EEEE, MMMM d, yyyy"),
           orders: dayOrders.length,
           revenue: dayOrders.reduce((s, o) => s + Number(o.total_price), 0),
         });
@@ -1002,6 +1004,7 @@ export default function Dashboard() {
                 axisLine={false}
               />
               <Tooltip
+                labelFormatter={(label, payload) => payload?.[0]?.payload?.fullDate || label}
                 contentStyle={{
                   background: "#fff",
                   border: "1px solid #e5e7eb",
@@ -1044,6 +1047,7 @@ export default function Dashboard() {
                 axisLine={false}
               />
               <Tooltip
+                labelFormatter={(label, payload) => payload?.[0]?.payload?.fullDate || label}
                 contentStyle={{
                   background: "#fff",
                   border: "1px solid #e5e7eb",

@@ -22,7 +22,7 @@ Cloudflare boundaries to cover these representative user journeys:
 Real end-to-end testing of staff provisioning, Supabase sign-in, OTP delivery,
 database triggers, inventory stock deduction, cancellation/restore, and order
 history must run against a dedicated Supabase staging project. Do not point
-automated mutation tests at the live H&C Laundry database.
+automated mutation tests at the live I&C Laundry database.
 
 Before a release, run:
 

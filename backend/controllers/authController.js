@@ -19,13 +19,14 @@ async function identityFor(user) {
 
 const accountNotFound = () => Object.assign(new Error('Account does not exist.'), { status: 404 })
 const literalPattern = value => value.replace(/[\\%_]/g, character => `\\${character}`)
+const isInternalAccountEmail = value => /@accounts\.(?:hc|ic)laundry\.local$/i.test(String(value || ''))
 
 async function findActiveAccount(identifier, includeContactEmail = false) {
   const value = String(identifier || '').trim()
   if (!value) return null
   const columns = value.includes('@')
     ? (includeContactEmail ? ['email', 'contact_email'] : ['email'])
-    : [/^HC-(?:STAFF|ADMIN)-/i.test(value) ? 'staff_code' : 'username']
+    : [/^(?:HC|IC)-(?:STAFF|ADMIN)-/i.test(value) ? 'staff_code' : 'username']
   for (const column of columns) {
     const { data, error } = await database.from('staff')
       .select('id, auth_id, email, contact_email').is('deleted_at', null)
@@ -68,8 +69,8 @@ async function passwordVerificationEmail(identity) {
     ? await database.from('staff').select('contact_email, email').eq('id', identity.staffId).maybeSingle()
     : { data: null, error: null }
   if (error) throw Object.assign(new Error(error.message), { status: 400 })
-  const email = staff?.contact_email || (staff?.email?.endsWith('@accounts.hclaundry.local') ? null : staff?.email) || identity.user.email
-  if (!email || email.endsWith('@accounts.hclaundry.local')) {
+  const email = staff?.contact_email || (isInternalAccountEmail(staff?.email) ? null : staff?.email) || identity.user.email
+  if (!email || isInternalAccountEmail(email)) {
     throw Object.assign(new Error('No contact email is available. Ask an administrator to add one before changing your password.'), { status: 400 })
   }
   return email
@@ -95,8 +96,8 @@ async function issuePasswordOtp({ userId, staffId, email }) {
   try {
     await sendEmail({
       to: email,
-      subject: 'H&C Laundry password verification code',
-      body: `Your H&C Laundry password-change code is: ${code}\n\nIt expires in 10 minutes. Do not share this code with anyone. If you did not request a password change, you can ignore this email.`,
+      subject: 'I&C Laundry password verification code',
+      body: `Your I&C Laundry password-change code is: ${code}\n\nIt expires in 10 minutes. Do not share this code with anyone. If you did not request a password change, you can ignore this email.`,
     })
   } catch (sendError) {
     await database.from('password_change_otps').update({ consumed_at: new Date().toISOString() }).eq('id', challenge.id)
@@ -137,7 +138,7 @@ async function verifyPasswordOtp(identity, code) {
 async function findResetAccount(identifier) {
   const data = await findActiveAccount(identifier, true)
   if (!data?.auth_id) return null
-  const email = data.contact_email || (data.email?.endsWith('@accounts.hclaundry.local') ? null : data.email)
+  const email = data.contact_email || (isInternalAccountEmail(data.email) ? null : data.email)
   if (!email) throw Object.assign(new Error('No recovery email is configured. Contact an administrator.'), { status: 400 })
   return { user: { id: data.auth_id }, staffId: data.id, email }
 }

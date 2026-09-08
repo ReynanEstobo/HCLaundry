@@ -1,4 +1,4 @@
-import { format, subDays } from "date-fns";
+import { format } from "date-fns";
 import {
   Building2,
   Download,
@@ -31,6 +31,7 @@ import { useRealtime } from "../lib/useRealtime";
 import { generateAiForecast, generateDecisionSupport } from "../services/geminiService";
 import { LoadingVisual, PageError, PageLoader } from "../components/AsyncState";
 import LoadingButton from '../components/LoadingButton'
+import { analyticsPeriod, chartTooltipDate, dailyChartLabel, descriptiveChartData } from '../utils/chartDates'
 
 // ─── Custom tooltip ────────────────────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
@@ -48,7 +49,7 @@ const CustomTooltip = ({ active, payload, label }) => {
         color: "#111827",
       }}
     >
-      <div style={{ fontWeight: 600, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>{chartTooltipDate(label, payload)}</div>
 
       {payload.map((p, i) => (
         <div
@@ -212,23 +213,10 @@ export default function Analytics() {
     }
     try {
 
-    const now = new Date();
-
-    let startDate;
-    let endDate = new Date().toISOString();
-
-    if (customRange.start && customRange.end) {
-      startDate = new Date(customRange.start).toISOString();
-      endDate = new Date(customRange.end).toISOString();
-    } else {
-      if (range === "weekly") {
-        startDate = subDays(now, 7).toISOString();
-      } else if (range === "monthly") {
-        startDate = new Date(now.getFullYear(), 0, 1).toISOString();
-      } else {
-        startDate = new Date(now.getFullYear() - 5, 0, 1).toISOString();
-      }
-    }
+    const period = analyticsPeriod(range, customRange);
+    if (period.start > period.end) throw new Error('Start date must be before the end date.');
+    const startDate = period.start.toISOString();
+    const endDate = period.end.toISOString();
 
     let orderQuery = supabase
       .from("orders")
@@ -337,110 +325,6 @@ export default function Analytics() {
     }
   }
 
-  function getDescriptiveData() {
-    let baseData = [];
-
-    // ─────────────────────────────────────
-    // WEEKLY
-    // ALWAYS MON → SUN
-    // ─────────────────────────────────────
-    if (range === "weekly") {
-      baseData = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
-        (day) => ({
-          date: day,
-          revenue: 0,
-          expenses: 0,
-        }),
-      );
-    }
-
-    // ─────────────────────────────────────
-    // MONTHLY
-    // ALWAYS JAN → DEC
-    // ─────────────────────────────────────
-    else if (range === "monthly") {
-      baseData = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ].map((month) => ({
-        date: month,
-        revenue: 0,
-        expenses: 0,
-      }));
-    }
-
-    // ─────────────────────────────────────
-    // YEARLY
-    // MAXIMUM 5 YEARS
-    // ─────────────────────────────────────
-    else {
-      const currentYear = new Date().getFullYear();
-
-      baseData = Array.from({ length: 5 }, (_, i) => ({
-        date: String(currentYear - 4 + i),
-        revenue: 0,
-        expenses: 0,
-      }));
-    }
-
-    // ─────────────────────────────────────
-    // REVENUE
-    // ─────────────────────────────────────
-    orders.forEach((o) => {
-      const d = new Date(o.created_at);
-
-      let key;
-
-      if (range === "weekly") {
-        key = format(d, "EEE");
-      } else if (range === "monthly") {
-        key = format(d, "MMM");
-      } else {
-        key = format(d, "yyyy");
-      }
-
-      const found = baseData.find((x) => x.date === key);
-
-      if (found) {
-        found.revenue += Number(o.amount_paid ?? (o.payment_status === "paid" ? o.total_price : 0));
-      }
-    });
-
-    // ─────────────────────────────────────
-    // EXPENSES
-    // ─────────────────────────────────────
-    expenses.forEach((e) => {
-      const d = new Date(e.expense_date);
-
-      let key;
-
-      if (range === "weekly") {
-        key = format(d, "EEE");
-      } else if (range === "monthly") {
-        key = format(d, "MMM");
-      } else {
-        key = format(d, "yyyy");
-      }
-
-      const found = baseData.find((x) => x.date === key);
-
-      if (found) {
-        found.expenses += Number(e.amount);
-      }
-    });
-
-    return baseData;
-  }
 
   function buildDailyHistory(orderData) {
     const totals = new Map();
@@ -538,7 +422,7 @@ export default function Analytics() {
 
         // WEEKLY
         if (range === "weekly") {
-          label = format(futureDate, "EEE");
+          label = dailyChartLabel(futureDate);
         }
 
         // MONTHLY
@@ -614,7 +498,7 @@ export default function Analytics() {
                 ? format(new Date(prediction.date), "yyyy")
                 : range === "monthly"
                   ? format(new Date(prediction.date), "MMM dd")
-                  : format(new Date(prediction.date), "EEE"),
+                  : dailyChartLabel(prediction.date),
             forecastDate: prediction.date,
             predicted: prediction.predictedRevenue,
             predictedOrders: prediction.predictedOrders,
@@ -724,7 +608,7 @@ export default function Analytics() {
 
       /* Legacy free-form DSS prompt retained only as a reference.
       const aiResult = await askGemini(`
-You are an AI-Based Decision Support System for H&C Laundry.
+You are an AI-Based Decision Support System for I&C Laundry.
 
 Analyze the ACTUAL analytics trends below.
 
@@ -808,7 +692,7 @@ Rules:
     }
   }
 
-  const descriptiveData = getDescriptiveData();
+  const descriptiveData = descriptiveChartData(orders, expenses, range, customRange);
 
   const formatAiCacheTime = (timestamp) => timestamp
     ? new Date(timestamp).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })
@@ -843,7 +727,7 @@ Rules:
 
   function downloadReportCsv() {
     const rows = [
-      ["H&C Laundry Analytics Report"],
+      ["I&C Laundry Analytics Report"],
       ["Scope", reportScope],
       ["Period", reportPeriod],
       ["Generated", new Date().toLocaleString("en-PH")],
@@ -876,7 +760,7 @@ Rules:
     const blob = new Blob([rows.map((row) => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `hc-laundry-analytics-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `ic-laundry-analytics-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
   }
@@ -892,7 +776,7 @@ Rules:
       : "<li>No decision-support insights are available for this scope.</li>";
     const serviceRows = operationalSummary.topServices.map((item) => `<tr><td>${html(item.name)}</td><td>${item.orders}</td><td>${peso(item.revenue)}</td></tr>`).join("") || "<tr><td colspan=\"3\">No service data</td></tr>";
     const branchRows = operationalSummary.topBranches.map((item) => `<tr><td>${html(item.name)}</td><td>${item.orders}</td><td>${peso(item.revenue)}</td></tr>`).join("") || "<tr><td colspan=\"3\">No branch data</td></tr>";
-    popup.document.write(`<!doctype html><html><head><title>H&C Laundry Analytics Report</title><style>body{font-family:Arial,sans-serif;color:#172033;padding:32px;line-height:1.45}h1{color:#0f8fc4;margin:0}h2{font-size:16px;margin:28px 0 10px}.meta{color:#667085}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}.card{border:1px solid #dbe3ec;border-radius:8px;padding:12px}.label{color:#667085;font-size:12px}.value{font-size:19px;font-weight:700;margin-top:4px}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #dbe3ec;padding:8px;text-align:left;font-size:13px}th{background:#f3f8fb}li{margin:9px 0}@media print{body{padding:0}}</style></head><body><h1>H&C Laundry Analytics Report</h1><p class=\"meta\"><strong>Scope:</strong> ${html(reportScope)} &nbsp; | &nbsp; <strong>Period:</strong> ${html(reportPeriod)}<br><strong>Generated:</strong> ${html(new Date().toLocaleString("en-PH"))}</p><div class=\"cards\"><div class=\"card\"><div class=\"label\">Total Revenue</div><div class=\"value\">${peso(stats.totalRevenue)}</div></div><div class=\"card\"><div class=\"label\">Total Expenses</div><div class=\"value\">${peso(stats.totalExpenses)}</div></div><div class=\"card\"><div class=\"label\">Net Profit</div><div class=\"value\">${peso(stats.profit)}</div></div><div class=\"card\"><div class=\"label\">Total Orders</div><div class=\"value\">${stats.totalOrders || 0}</div></div></div><h2>High-Performing Services</h2><table><tr><th>Service</th><th>Orders</th><th>Revenue Received</th></tr>${serviceRows}</table><h2>Branch Performance</h2><table><tr><th>Branch</th><th>Orders</th><th>Revenue Received</th></tr>${branchRows}</table><h2>AI-Assisted Decision Support</h2><ul>${insightMarkup}</ul><p class=\"meta\">Forecast method: ${html(forecastModel || "Not available")}</p></body></html>`);
+    popup.document.write(`<!doctype html><html><head><title>I&C Laundry Analytics Report</title><style>body{font-family:Arial,sans-serif;color:#172033;padding:32px;line-height:1.45}h1{color:#0f8fc4;margin:0}h2{font-size:16px;margin:28px 0 10px}.meta{color:#667085}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}.card{border:1px solid #dbe3ec;border-radius:8px;padding:12px}.label{color:#667085;font-size:12px}.value{font-size:19px;font-weight:700;margin-top:4px}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #dbe3ec;padding:8px;text-align:left;font-size:13px}th{background:#f3f8fb}li{margin:9px 0}@media print{body{padding:0}}</style></head><body><h1>I&C Laundry Analytics Report</h1><p class=\"meta\"><strong>Scope:</strong> ${html(reportScope)} &nbsp; | &nbsp; <strong>Period:</strong> ${html(reportPeriod)}<br><strong>Generated:</strong> ${html(new Date().toLocaleString("en-PH"))}</p><div class=\"cards\"><div class=\"card\"><div class=\"label\">Total Revenue</div><div class=\"value\">${peso(stats.totalRevenue)}</div></div><div class=\"card\"><div class=\"label\">Total Expenses</div><div class=\"value\">${peso(stats.totalExpenses)}</div></div><div class=\"card\"><div class=\"label\">Net Profit</div><div class=\"value\">${peso(stats.profit)}</div></div><div class=\"card\"><div class=\"label\">Total Orders</div><div class=\"value\">${stats.totalOrders || 0}</div></div></div><h2>High-Performing Services</h2><table><tr><th>Service</th><th>Orders</th><th>Revenue Received</th></tr>${serviceRows}</table><h2>Branch Performance</h2><table><tr><th>Branch</th><th>Orders</th><th>Revenue Received</th></tr>${branchRows}</table><h2>AI-Assisted Decision Support</h2><ul>${insightMarkup}</ul><p class=\"meta\">Forecast method: ${html(forecastModel || "Not available")}</p></body></html>`);
     popup.document.close();
     popup.focus();
     window.setTimeout(() => popup.print(), 250);
@@ -1120,7 +1004,7 @@ Rules:
                 vertical={false}
               />
 
-              <XAxis dataKey="date" />
+              <XAxis dataKey="date" minTickGap={24} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
 
               <YAxis />
 
@@ -1188,14 +1072,14 @@ Rules:
             </div>
           ) : (
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={forecastData}>
+            <BarChart data={forecastData.map(point => ({ ...point, date: point.forecastDate && range !== 'yearly' ? dailyChartLabel(point.forecastDate) : point.date }))}>
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke="#f3f4f6"
                 vertical={false}
               />
 
-              <XAxis dataKey="date" />
+              <XAxis dataKey="date" minTickGap={24} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
 
               <YAxis />
 

@@ -66,7 +66,7 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return (
-        JSON.parse(localStorage.getItem("hc_laundry_collapsed")) || false
+        JSON.parse(localStorage.getItem("ic_laundry_collapsed") || localStorage.getItem("hc_laundry_collapsed")) || false
       );
     } catch {
       return false;
@@ -75,7 +75,7 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem("hc_laundry_collapsed", JSON.stringify(collapsed));
+    localStorage.setItem("ic_laundry_collapsed", JSON.stringify(collapsed));
   }, [collapsed]);
 
   // Close mobile sidebar on nav
@@ -99,13 +99,13 @@ export default function Layout() {
           <div className="brand-icon">
             <img
               src="/assets/Rectangle.png"
-              alt="H&C Laundry"
+              alt="I&C Laundry"
               style={{ width: 52, height: 52, objectFit: "contain" }}
             />
           </div>
           {sidebarExpanded && (
             <div>
-              <h1>H&C Laundry</h1>
+              <h1>I&C Laundry</h1>
               <span>Management System</span>
             </div>
           )}
@@ -191,7 +191,7 @@ export default function Layout() {
                 <span className="top-bar-user-name">
                   {staffName || (role === "admin" ? "Admin" : "Staff")}
                 </span>
-                <span className="top-bar-user-email">{contactEmail || (user?.email?.endsWith('@accounts.hclaundry.local') ? 'Staff account' : user?.email)}</span>
+                <span className="top-bar-user-email">{contactEmail || (/@accounts\.(?:hc|ic)laundry\.local$/i.test(user?.email || '') ? 'Staff account' : user?.email)}</span>
                 {role !== "admin" && branch && (
                   <span className="top-bar-user-branch" title={`Assigned branch: ${branch}`}>
                     <MapPin size={11} aria-hidden="true" />

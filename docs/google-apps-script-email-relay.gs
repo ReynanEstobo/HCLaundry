@@ -1,5 +1,5 @@
 /**
- * H&C Laundry email relay for Cloudflare Workers.
+ * I&C Laundry email relay for Cloudflare Workers.
  *
  * Create this script while signed in as hclaundryhub@gmail.com. The account
  * that owns the deployment is the Gmail sender. Never put the relay secret in
@@ -7,7 +7,7 @@
  */
 
 const SECRET_PROPERTY = 'EMAIL_RELAY_SECRET';
-const SENDER_NAME = 'H&C Laundry';
+const SENDER_NAME = 'I&C Laundry';
 const MAX_RECIPIENT_LENGTH = 254;
 const MAX_SUBJECT_LENGTH = 200;
 const MAX_BODY_LENGTH = 20000;

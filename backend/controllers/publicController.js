@@ -42,7 +42,7 @@ export async function sendContactMessage(body) {
 
   await sendEmail({
     to: inbox,
-    subject: 'New website contact message — H&C Laundry',
+    subject: 'New website contact message — I&C Laundry',
     body: `Name: ${name}\nEmail: ${email}\nPhone: ${phone || 'Not provided'}\nAddress: ${address || 'Not provided'}\n\nMessage:\n${message}`,
   })
   return { success: true }

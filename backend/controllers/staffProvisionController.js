@@ -19,7 +19,7 @@ function baseUsername(name) {
 function generatePassword() {
   // Memorable for handover, unique per account, and mandatory to replace at
   // first sign-in. Do not use one shared temporary password for all staff.
-  return `H&CLaundry${randomInt(1000, 10000)}`
+  return `I&CLaundry${randomInt(1000, 10000)}`
 }
 
 async function resolveBranch(branchName) {
@@ -40,12 +40,12 @@ async function uniqueUsername(name) {
 }
 
 function newAccountCode(role = 'staff') {
-  const prefix = role === 'admin' ? 'HC-ADMIN' : 'HC-STAFF'
+  const prefix = role === 'admin' ? 'IC-ADMIN' : 'IC-STAFF'
   return `${prefix}-${randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase()}`
 }
 
 function internalAuthEmail(username) {
-  return `${username}.${randomUUID().slice(0, 8)}@accounts.hclaundry.local`
+  return `${username}.${randomUUID().slice(0, 8)}@accounts.iclaundry.local`
 }
 
 async function writeAudit(action, staff, actorStaffId, before = {}, after = {}) {

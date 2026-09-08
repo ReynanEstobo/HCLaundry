@@ -101,7 +101,7 @@ test('email change API: password is required, sends only to requested email, bin
   t.after(() => { Object.defineProperty(authClient,'auth',authDescriptor); database.from=originalFrom;database.rpc=originalRpc;globalThis.fetch=originalFetch;configureRuntimeEnv(null) })
   await assert.rejects(requestEmailChange({newEmail:'new@example.com',currentPassword:'wrong'},identity),/incorrect/)
   assert.equal(rpcCalls.length,0)
-  await assert.rejects(requestEmailChange({newEmail:'x@accounts.hclaundry.local',currentPassword:'pw'},identity),/valid new email/)
+  await assert.rejects(requestEmailChange({newEmail:'x@accounts.iclaundry.local',currentPassword:'pw'},identity),/valid new email/)
   await assert.rejects(requestEmailChange({}, {...identity,role:'unassigned'}),/active/)
   acceptPassword = true
   const result = await requestEmailChange({newEmail:'New@Example.com',currentPassword:'correct'},identity)

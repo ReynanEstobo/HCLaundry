@@ -39,7 +39,7 @@ export default function ActivatePassword() {
               <div className="login-card-icon"><ShieldCheck size={24} /></div>
               <div>
                 <h2>Activate your staff account</h2>
-                <p>Create a private password before accessing H&C Laundry.</p>
+                <p>Create a private password before accessing I&C Laundry.</p>
               </div>
             </div>
             <form onSubmit={submit} className="login-form">

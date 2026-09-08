@@ -32,9 +32,9 @@ export default function Login() {
         <div className="login-left-circle login-left-circle-1" />
         <div className="login-left-circle login-left-circle-2" />
         <div className="login-left-circle login-left-circle-3" />
-        <img src="/assets/Rectangle.png" alt="H&C Laundry" className="login-left-logo" />
+        <img src="/assets/Rectangle.png" alt="I&C Laundry" className="login-left-logo" />
         <div className="login-left-text">
-          <h1>H&C Laundry</h1>
+          <h1>I&C Laundry</h1>
           <p>Professional laundry services - fresh, clean, and perfectly cared every time.</p>
         </div>
       </div>
@@ -47,8 +47,8 @@ export default function Login() {
           </button>
           <div className="login-card-enhanced">
             <div className="login-card-header">
-              <div className="login-card-icon"><img src="/assets/Rectangle.png" alt="H&C Laundry" /></div>
-              <div><h2>Welcome back</h2><p>Sign in to H&C Laundry dashboard</p></div>
+              <div className="login-card-icon"><img src="/assets/Rectangle.png" alt="I&C Laundry" /></div>
+              <div><h2>Welcome back</h2><p>Sign in to I&C Laundry dashboard</p></div>
             </div>
             {error && <div className="login-error-enhanced"><AlertCircle size={15} />{error}</div>}
             <form onSubmit={handleSubmit} className="login-form">
@@ -74,7 +74,7 @@ export default function Login() {
                 <button type="button" className="login-forgot-password" disabled={loading} onClick={() => navigate('/forgot-password')}>Forgot password?</button>
               </div>
             </form>
-            <div className="login-card-footer">Powered by H&C Laundry &copy; {new Date().getFullYear()}</div>
+            <div className="login-card-footer">Powered by I&C Laundry &copy; {new Date().getFullYear()}</div>
           </div>
         </div>
       </div>

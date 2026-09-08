@@ -121,13 +121,13 @@ export default function Notifications() {
 
 Great news! Your laundry (Order #${
             order.order_number
-          }) is now ready for pickup at H&C Laundry.
+          }) is now ready for pickup at I&C Laundry.
 
 Please pick it up at your earliest convenience during our business hours.
 
-Thank you for choosing H&C Laundry!
+Thank you for choosing I&C Laundry!
 
-— H&C Laundry Team`,
+— I&C Laundry Team`,
         }),
       });
 
@@ -311,7 +311,7 @@ Thank you for choosing H&C Laundry!
                   }}
                 >
                   <CheckCircle size={16} />
-                  H&C Laundry Email Delivery
+                  I&C Laundry Email Delivery
                 </div>
 
                 <p

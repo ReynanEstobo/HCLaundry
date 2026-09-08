@@ -89,4 +89,4 @@ const server = http.createServer(async (request, response) => {
   }
 })
 
-server.listen(port, () => console.log(`H&C Laundry backend listening on http://localhost:${port}`))
+server.listen(port, () => console.log(`I&C Laundry backend listening on http://localhost:${port}`))

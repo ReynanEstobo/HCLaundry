@@ -1,4 +1,4 @@
-# H&C Laundry manual UAT checklist
+# I&C Laundry manual UAT checklist
 
 This is a browser-based acceptance test for the deployed site, performed as an
 actual administrator, staff member, and public visitor. It is written for the
@@ -50,12 +50,12 @@ expected outcome, actual outcome, and evidence (screenshot/order number).
 ## 2. Public website
 
 - [ ] Open `/` in a private window. Confirm no dashboard data is visible.
-- [ ] Check the public H&C Laundry name, contact details, working-hours data,
+- [ ] Check the public I&C Laundry name, contact details, working-hours data,
   images, and navigation on desktop and mobile.
 - [ ] Submit the contact form with every required field blank. It must show
   validation and must not send a message.
 - [ ] Submit a valid contact message. Confirm one success result and one
-  branded email at the configured recipient. The email must have the H&C blue
+  branded email at the configured recipient. The email must have the I&C blue
   layout and the automated/no-reply footer.
 - [ ] Search order tracking with blank, malformed, and unknown order numbers.
   It must not disclose whether any other order exists.
@@ -80,8 +80,8 @@ expected outcome, actual outcome, and evidence (screenshot/order number).
 ### Identifier login check — current review item
 
 - [ ] Attempt login with a staff username.
-- [ ] Attempt login with the generated `HC-STAFF-...` account ID.
-- [ ] Attempt login with the generated `HC-ADMIN-...` account ID.
+- [ ] Attempt login with the generated `IC-STAFF-...` account ID.
+- [ ] Attempt login with the generated `IC-ADMIN-...` account ID.
 
 Expected: all three identifiers work when paired with the correct password.
 Current code note: `Login.jsx` calls Supabase directly, whereas account-ID and
@@ -94,11 +94,11 @@ safe mechanism.
 
 - [ ] As an administrator, create a staff account with name, username, contact
   email, role, and Main branch.
-- [ ] Confirm the generated credentials dialog contains an `HC-STAFF-...`
+- [ ] Confirm the generated credentials dialog contains an `IC-STAFF-...`
   account ID, username, temporary password, and Main branch. Save them once;
   the temporary password should not be retrievable later.
 - [ ] Create an administrator account with a valid contact email.
-- [ ] Confirm its credentials use `HC-ADMIN-...`, its role is Administrator,
+- [ ] Confirm its credentials use `IC-ADMIN-...`, its role is Administrator,
   and no branch is shown or stored.
 - [ ] Edit the administrator and confirm no branch assignment is required.
 - [ ] Edit a staff member and confirm a valid branch remains required.
@@ -123,7 +123,7 @@ safe mechanism.
 - [ ] Request a recovery code, then delete the account before using it. Password reset must show "Account does not exist."
 - [ ] An account signed in before deletion cannot make protected API requests afterward. Restoring the account permits normal login again.
 - [ ] Submit a known account with a contact email. Confirm one OTP email,
-  branded H&C layout, masked destination in the UI, and no secret in browser
+  branded I&C layout, masked destination in the UI, and no secret in browser
   logs.
 - [ ] Enter a malformed OTP, a wrong OTP, and then a correct OTP. Wrong values
   must be rejected; correct value must permit a 10+ character matching password.
@@ -201,7 +201,7 @@ a **FAIL / release blocker** and fix this before production sign-off.
 - [ ] Validate missing customer name, phone, service (when services exist),
   branch (admin), zero weight, and less than 50% payment. None may create data.
 - [ ] Create a valid paid order and a valid partial-payment order. Confirm each
-  starts as **Received**, receives an `HC-...` number, stores service/weight,
+  starts as **Received**, receives an `IC-...` number, stores service/weight,
   and displays one saved Estimated Ready time.
 - [ ] Confirm default inventory usage-per-load and chosen add-ons are deducted
   once, only from the selected branch, with usage-log rows.
@@ -258,7 +258,7 @@ a **FAIL / release blocker** and fix this before production sign-off.
 
 - [ ] As an authenticated account, send a manual email with missing recipient,
   subject, or body. It must validate locally/server-side and not send.
-- [ ] Send one valid manual email to a test inbox. Confirm H&C-branded HTML,
+- [ ] Send one valid manual email to a test inbox. Confirm I&C-branded HTML,
   readable plain text, subject/body, and automated/no-reply footer.
 - [ ] Send a Ready-for-Pickup email from an order with customer email.
 - [ ] Exercise SMS only if the provider is configured. Confirm no secrets or

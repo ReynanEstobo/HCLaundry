@@ -73,7 +73,7 @@ async function sendReadyEmail(order, customerName, customerEmail) {
     const res = await sendEmail({
         to: customerEmail,
         subject: `Your Laundry is Ready for Pickup! (Tracking #: ${order.order_number})`,
-        body: `Hi ${customerName || "Customer"},\n\nGreat news! Your laundry is now ready for pickup at H&C Laundry.\n\nTracking Number: ${order.order_number}\n\nPlease pick it up at your earliest convenience during our business hours.\n\nThank you for choosing H&C Laundry!\n\n-- H&C Laundry Team`,
+        body: `Hi ${customerName || "Customer"},\n\nGreat news! Your laundry is now ready for pickup at I&C Laundry.\n\nTracking Number: ${order.order_number}\n\nPlease pick it up at your earliest convenience during our business hours.\n\nThank you for choosing I&C Laundry!\n\n-- I&C Laundry Team`,
     });
     if (res.success) {
       toast.success(`Email notification sent to ${customerEmail}`);
@@ -98,7 +98,7 @@ async function sendOrderSMS(
       ? new Date(estimatedReadyAt).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
       : "to be confirmed";
 
-    const message = `Hi ${customerName || "Customer"}! Your laundry order has been received.\n\nTracking #: ${orderNumber}\nService: ${serviceName}\nWeight: ${weightKg}kg\nTotal: P${totalPrice.toLocaleString()}\nEstimated ready for pickup: ${etaText}\n\nTrack your order at our website using your tracking number.\n\nWe'll notify you when it's ready. Thank you! - H&C Laundry`;
+    const message = `Hi ${customerName || "Customer"}! Your laundry order has been received.\n\nTracking #: ${orderNumber}\nService: ${serviceName}\nWeight: ${weightKg}kg\nTotal: P${totalPrice.toLocaleString()}\nEstimated ready for pickup: ${etaText}\n\nTrack your order at our website using your tracking number.\n\nWe'll notify you when it's ready. Thank you! - I&C Laundry`;
 
     await sendSms({ phone, message });
   } catch {
@@ -109,7 +109,7 @@ async function sendOrderSMS(
 async function sendReadySMS(phone, orderNumber, customerName) {
   if (!phone) return;
   try {
-    const message = `Hi ${customerName || "Customer"}! Your laundry (Tracking #: ${orderNumber}) is now READY for pickup. Please visit H&C Laundry at your earliest convenience. Thank you!`;
+    const message = `Hi ${customerName || "Customer"}! Your laundry (Tracking #: ${orderNumber}) is now READY for pickup. Please visit I&C Laundry at your earliest convenience. Thank you!`;
 
     await sendSms({ phone, message });
   } catch {
@@ -135,7 +135,7 @@ async function sendOrderReceivedEmail(
     const res = await sendEmail({
         to: customerEmail,
         subject: `Order Received! (Tracking #: ${orderNumber})`,
-        body: `Hi ${customerName || "Customer"},\n\nThank you for choosing H&C Laundry! Your garment has been received.\n\nOrder Details:\n- Tracking Number: ${orderNumber}\n- Service: ${serviceName}\n- Weight: ${weightKg} kg\n- Total: P${totalPrice.toLocaleString()}\n\nEstimated ready-for-pickup time: ${completionText}\n\nYou can track your order anytime on our website using your tracking number. We'll notify you once it is ready for pickup.\n\nThank you!\n\n-- H&C Laundry Team`,
+        body: `Hi ${customerName || "Customer"},\n\nThank you for choosing I&C Laundry! Your garment has been received.\n\nOrder Details:\n- Tracking Number: ${orderNumber}\n- Service: ${serviceName}\n- Weight: ${weightKg} kg\n- Total: P${totalPrice.toLocaleString()}\n\nEstimated ready-for-pickup time: ${completionText}\n\nYou can track your order anytime on our website using your tracking number. We'll notify you once it is ready for pickup.\n\nThank you!\n\n-- I&C Laundry Team`,
     });
     if (res.success) {
       toast.success(`Order confirmation email sent to ${customerEmail}`);

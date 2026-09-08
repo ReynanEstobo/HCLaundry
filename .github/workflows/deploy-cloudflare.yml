@@ -1,4 +1,4 @@
-name: Deploy H&C Laundry
+name: Deploy I&C Laundry
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 # Do not run two production deployments at the same time. A newer push waits
 # for the active deployment instead of racing it.
 concurrency:
-  group: hc-laundry-production
+  group: ic-laundry-production
   cancel-in-progress: false
 
 permissions:
