@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { apiFetch } from '../services/api/client'
+import { supabase } from '../lib/supabase'
 import LoadingButton from '../components/LoadingButton'
 
 function PasswordField({ label, value, onChange, visible, onToggle, placeholder }) {
@@ -50,10 +51,8 @@ export default function AccountSecurity() {
     if (!/^\d{6}$/.test(otp)) return toast.error('Enter the 6-digit verification code.')
     setSaving(true)
     try {
-      await apiFetch('/api/auth/password', {
-        method: 'PATCH',
-        body: JSON.stringify({ newPassword, otp }),
-      })
+      const { error } = await supabase.auth.updateUser({ password: newPassword, otp })
+      if (error) throw new Error(error.message)
       setPasswordChanged(true)
     } catch (error) {
       toast.error(error.message || 'Unable to change password.')

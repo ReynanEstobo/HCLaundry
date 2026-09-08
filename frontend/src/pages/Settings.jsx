@@ -155,10 +155,8 @@ export default function Settings() {
 
     setPwLoading(true);
     try {
-      await apiFetch('/api/auth/password', {
-        method: 'PATCH',
-        body: JSON.stringify({ newPassword, otp: passwordOtp }),
-      });
+      const { error } = await supabase.auth.updateUser({ password: newPassword, otp: passwordOtp });
+      if (error) throw new Error(error.message);
       setNewPassword("");
       setConfirmPassword("");
       setPasswordOtp("");

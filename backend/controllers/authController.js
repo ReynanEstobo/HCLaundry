@@ -175,11 +175,13 @@ export async function updatePassword({ currentPassword, newPassword, otp }, iden
     // Administrators use the password form in Settings. Their current
     // password re-authenticates the session before the update; staff use the
     // self-service email-OTP screen.
-    if (identity.role === 'admin' && currentPassword) {
+    if (otp) {
+      challenge = await verifyPasswordOtp(identity, otp)
+    } else if (identity.role === 'admin' && currentPassword) {
       const { error: signInError } = await authClient.auth.signInWithPassword({ email, password: currentPassword })
       if (signInError) throw Object.assign(new Error('Current password is incorrect.'), { status: 400 })
     } else {
-      challenge = await verifyPasswordOtp(identity, otp)
+      throw Object.assign(new Error('Request and enter a valid verification code.'), { status: 400 })
     }
     ;({ error } = await database.auth.admin.updateUserById(identity.user.id, { password: newPassword }))
   }

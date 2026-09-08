@@ -68,7 +68,11 @@ export const supabase = {
     async updateUser({ password, currentPassword, otp }) {
       try {
         const session = getStoredSession()
-        await apiFetch('/api/auth/password', { method: 'PATCH', body: JSON.stringify({ currentPassword: currentPassword || reauthenticationPassword, newPassword: password, otp }) })
+        // An OTP is the selected verification factor for the current
+        // password-change flow. Do not send the cached login password when an
+        // OTP is present; that would make an administrator take a different
+        // server-side verification path than staff.
+        await apiFetch('/api/auth/password', { method: 'PATCH', body: JSON.stringify({ currentPassword: currentPassword || (otp ? undefined : reauthenticationPassword), newPassword: password, otp }) })
         // Changing a password invalidates the prior JWT in some Supabase
         // configurations. Sign in again right away so the app stores a new,
         // valid session before leaving the activation/security screen.
