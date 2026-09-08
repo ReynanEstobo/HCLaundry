@@ -25,7 +25,7 @@ const RecycleBin = lazy(() => import('./pages/RecycleBin'))
 function ProtectedRoute({ children }) {
   const { user, mustChangePassword, loading } = useAuth()
   if (loading) return <div className="loading-spinner"><div className="spinner" /></div>
-  if (!user) return <Navigate to="/login" />
+  if (!user) return <Navigate to="/login" replace />
   if (mustChangePassword) return <Navigate to="/activate-password" replace />
   return children
 }

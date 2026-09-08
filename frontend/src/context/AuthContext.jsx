@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { getStoredSession } from '../services/api/client'
+import { getStoredSession, startSessionMonitor } from '../services/api/client'
 
 const AuthContext = createContext({})
 
@@ -14,8 +14,10 @@ export function AuthProvider({ children }) {
   const [contactEmail, setContactEmail] = useState(null)
   const [mustChangePassword, setMustChangePassword] = useState(false)
   const [loading, setLoading] = useState(true)
+  const profileVersion = useRef(0)
 
   async function fetchStaffRole(authUser) {
+    const version = ++profileVersion.current
     if (!authUser) { setRole(null); setStaffName(null); setBranch(null); setContactEmail(null); setMustChangePassword(false); return }
     // The API intentionally blocks every normal data endpoint until a
     // provisioned staff member changes their temporary password.  Use the
@@ -34,6 +36,7 @@ export function AuthProvider({ children }) {
       .select('role, full_name, branch, contact_email, must_change_password')
       .eq('auth_id', authUser.id)
       .maybeSingle()
+    if (version !== profileVersion.current) return
     if (data) {
       setRole(String(data.role || 'unassigned').toLowerCase())
       setStaffName(data.full_name)
@@ -51,19 +54,25 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    let active = true
+    let lastToken
+    const applySession = session => {
+      if (!active || lastToken === (session?.access_token || null)) return
+      lastToken = session?.access_token || null
       const u = session?.user ?? null
       setUser(u)
-      fetchStaffRole(u).then(() => setLoading(false))
-    })
+      fetchStaffRole(u).finally(() => { if (active) setLoading(false) })
+    }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => applySession(session))
+    const stopMonitor = startSessionMonitor()
+    applySession(getStoredSession())
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const u = session?.user ?? null
-      setUser(u)
-      fetchStaffRole(u)
-    })
-
-    return () => subscription.unsubscribe()
+    return () => {
+      active = false
+      profileVersion.current++
+      subscription.unsubscribe()
+      stopMonitor()
+    }
   }, [])
 
   const signIn = async (email, password) => {

@@ -22,6 +22,9 @@ export async function createOrder(body, identity) {
   const amountPaid = Number(order.amount_paid || 0)
   if (!Number.isFinite(weight) || weight <= 0) throw Object.assign(new Error('A valid order weight is required.'), { status: 400 })
   if (!Number.isFinite(total) || total < 0) throw Object.assign(new Error('A valid order total is required.'), { status: 400 })
+  if (!['number', 'string'].includes(typeof order.amount_paid) || !String(order.amount_paid).trim() || !Number.isFinite(amountPaid) || amountPaid < 0) {
+    throw Object.assign(new Error('A valid non-negative payment amount is required.'), { status: 400 })
+  }
   if (amountPaid < total * 0.5) throw Object.assign(new Error(`Minimum 50% payment required: ₱${(total * 0.5).toLocaleString()}`), { status: 400 })
   const loads = Math.max(1, Math.ceil(weight / Number(body.bundleKg || 8)))
   const payload = {

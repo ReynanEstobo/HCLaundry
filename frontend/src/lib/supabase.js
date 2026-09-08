@@ -1,8 +1,11 @@
-import { apiFetch, clearSession, getStoredSession, runQuery, storeSession } from '../services/api/client'
+import { apiFetch, clearSession, getStoredSession, onSessionChange, runQuery, storeSession } from '../services/api/client'
 
 const authListeners = new Set()
 let reauthenticationPassword = null
-const emitAuthChange = session => authListeners.forEach(listener => listener('SIGNED_IN', session))
+onSessionChange(session => {
+  if (!session) reauthenticationPassword = null
+  authListeners.forEach(listener => listener(session ? 'SIGNED_IN' : 'SIGNED_OUT', session))
+})
 
 class QueryBuilder {
   constructor(table) { this.table = table; this.request = { operation: 'select', selection: '*', filters: [], orders: [] } }
@@ -54,7 +57,6 @@ export const supabase = {
         reauthenticationPassword = password
         data.session.hc_must_change_password = Boolean(data.mustChangePassword)
         storeSession(data.session)
-        emitAuthChange(data.session)
         return { data: { user: data.user, session: data.session }, error: null }
       } catch (error) { return { data: { user: null, session: null }, error: { message: error.message } } }
     },
@@ -64,7 +66,7 @@ export const supabase = {
         return { data: { user: data.user, session: data.session }, error: null }
       } catch (error) { return { data: { user: null, session: null }, error: { message: error.message } } }
     },
-    async signOut() { clearSession(); reauthenticationPassword = null; emitAuthChange(null); return { error: null } },
+    async signOut() { clearSession(); return { error: null } },
     async updateUser({ password, currentPassword, otp }) {
       try {
         const session = getStoredSession()
@@ -79,7 +81,6 @@ export const supabase = {
         const refreshed = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ identifier: session?.user?.email, password }) })
         refreshed.session.hc_must_change_password = Boolean(refreshed.mustChangePassword)
         storeSession(refreshed.session)
-        emitAuthChange(refreshed.session)
         reauthenticationPassword = password
         return { error: null }
       } catch (error) { return { error: { message: error.message } } }

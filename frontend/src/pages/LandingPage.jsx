@@ -295,26 +295,18 @@ export default function LandingPage() {
     setTrackError("");
     setTrackResults(null);
     try {
-      const { data: orders, error: ordErr } = await supabase
-        .from("orders")
-        .select(
-          "id, order_number, status, weight_kg, total_price, created_at, estimated_ready_at, eta_source, customer_id, customers(name), service_types(name)",
-        )
-        .ilike("order_number", `%${cleaned}%`)
-        .not("status", "eq", "cancelled")
-        .order("created_at", { ascending: false })
-        .limit(10);
-      if (ordErr) throw ordErr;
+      const { data: orders } = await apiFetch(
+        `/api/public/orders/track?q=${encodeURIComponent(cleaned)}`,
+      );
       const enriched = (orders || []).map((o) => ({
         ...o,
-        customer_name: o.customers?.name || "Customer",
         service_name: o.service_types?.name || "Service",
       }));
       setTrackResults(enriched.length > 0 ? enriched : null);
       if (enriched.length === 0)
         setTrackError("No orders found for this order number");
     } catch (err) {
-      setTrackError("Something went wrong. Please try again.");
+      setTrackError(err.message || "Unable to track your order. Please try again.");
     } finally {
       setTrackLoading(false);
     }
@@ -327,24 +319,17 @@ export default function LandingPage() {
     if (!cleaned) return;
 
     const refetch = () => {
-      supabase
-        .from("orders")
-        .select(
-          "id, order_number, status, weight_kg, total_price, created_at, estimated_ready_at, eta_source, customer_id, customers(name), service_types(name)",
-        )
-        .ilike("order_number", `%${cleaned}%`)
-        .not("status", "eq", "cancelled")
-        .order("created_at", { ascending: false })
-        .limit(10)
+      apiFetch(`/api/public/orders/track?q=${encodeURIComponent(cleaned)}`)
         .then(({ data }) => {
           if (data) {
             const enriched = data.map((o) => ({
               ...o,
-              customer_name: o.customers?.name || "Customer",
               service_name: o.service_types?.name || "Service",
             }));
             setTrackResults(enriched.length > 0 ? enriched : null);
           }
+        }).catch(() => {
+          // Preserve the last result on a temporary polling failure.
         });
     };
 
@@ -697,14 +682,11 @@ export default function LandingPage() {
               const eta = order.estimated_ready_at ? new Date(order.estimated_ready_at) : null;
 
               return (
-                <div className="track-card" key={order.id}>
+                <div className="track-card" key={order.order_number}>
                   <div className="track-card-header">
                     <div className="track-card-info">
                       <span className="track-order-num">
                         #{order.order_number}
-                      </span>
-                      <span className="track-customer">
-                        {order.customer_name}
                       </span>
                     </div>
                     <div className="track-card-meta">

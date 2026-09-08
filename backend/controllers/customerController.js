@@ -14,7 +14,7 @@ async function resolveBranch(identity, requestedBranch) {
 
 export async function listVisibleCustomers(identity) {
   if (identity.role === 'admin') {
-    const { data, error } = await database.from('customers').select('*').order('created_at', { ascending: false })
+    const { data, error } = await database.from('customers').select('*').is('deleted_at', null).order('created_at', { ascending: false })
     if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
     return { data: data || [] }
   }
@@ -23,11 +23,12 @@ export async function listVisibleCustomers(identity) {
   }
   const { data, error } = await database
     .from('customer_branches')
-    .select('customers(*)')
+    .select('customers!inner(*)')
+    .is('customers.deleted_at', null)
     .eq('branch_id', identity.branchId)
     .order('last_served_at', { ascending: false })
   if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
-  return { data: (data || []).map(row => row.customers).filter(Boolean) }
+  return { data: (data || []).map(row => row.customers).filter(customer => customer && !customer.deleted_at) }
 }
 
 export async function lookupCustomer(phone, identity) {

@@ -3,12 +3,17 @@ import { runtimeValue } from '../config/supabase.js'
 import { sendEmail } from '../services/notificationService.js'
 
 export async function trackOrder(orderNumber) {
-  if (!orderNumber?.trim()) throw Object.assign(new Error('Tracking number is required'), { status: 400 })
+  if (typeof orderNumber !== 'string' || !orderNumber.trim()) throw Object.assign(new Error('Tracking number is required'), { status: 400 })
+  const number = orderNumber.trim().toUpperCase()
+  if (!/^(?:IC|HC|4J)-\d{8}-\d{4}$/.test(number)) {
+    throw Object.assign(new Error('Enter the complete tracking number from your receipt.'), { status: 400 })
+  }
   const { data, error } = await database.from('orders')
-    .select('id, order_number, status, weight_kg, total_price, created_at, estimated_ready_at, original_estimated_ready_at, eta_revised_at, eta_source, customer_id, customers(name), service_types(name)')
-    .ilike('order_number', `%${orderNumber.trim()}%`)
+    .select('order_number, status, weight_kg, created_at, estimated_ready_at, original_estimated_ready_at, eta_revised_at, eta_source, service_types(name)')
+    .eq('order_number', number)
     .neq('status', 'cancelled')
     .order('created_at', { ascending: false })
+    .limit(1)
   if (error) throw Object.assign(new Error(error.message), { status: 400 })
   return { data: data || [] }
 }

@@ -130,6 +130,9 @@ async function assertInventoryRecordOwnership(table, request, identity) {
 
 export async function execute(table, request, identity) {
   if (!TABLES.has(table)) throw Object.assign(new Error('Unknown resource'), { status: 404 })
+  if (table === 'staff' && request.operation === 'delete' && identity.role !== 'admin') {
+    throw Object.assign(new Error('Only administrators can delete accounts.'), { status: 403 })
+  }
   if (table === 'settings' && request.operation !== 'select' && identity.role !== 'admin') {
     throw Object.assign(new Error('Only administrators can change business settings.'), { status: 403 })
   }
