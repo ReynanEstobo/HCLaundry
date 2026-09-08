@@ -54,6 +54,7 @@ async function main() {
   try {
     const info = await transporter.sendMail({
       from: `"H&C Laundry" <${GMAIL_EMAIL}>`,
+      replyTo: GMAIL_EMAIL,
       to: testTo,
       subject: "Order Received! (Order #HC-TEST-0001)",
       text: body,

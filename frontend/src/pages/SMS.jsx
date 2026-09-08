@@ -310,7 +310,7 @@ Thank you for choosing H&C Laundry!
                   }}
                 >
                   <CheckCircle size={16} />
-                  Gmail Connected
+                  H&C Laundry Email Delivery
                 </div>
 
                 <p
@@ -319,9 +319,9 @@ Thank you for choosing H&C Laundry!
                     color: "var(--text-secondary)",
                   }}
                 >
-                  Email notifications are active via Gmail. Customers with email
-                  addresses will receive notifications when their garments are
-                  ready for pickup.
+                  Email notifications are sent from hclaundryhub@gmail.com.
+                  Customers with email addresses will receive notifications when
+                  their garments are ready for pickup.
                 </p>
               </div>
 
@@ -355,7 +355,7 @@ Thank you for choosing H&C Laundry!
 
                   <li>Quick ready-for-pickup email sending</li>
 
-                  <li>Gmail integration</li>
+                  <li>Secure Gmail delivery</li>
 
                   <li>Real-time order monitoring</li>
                 </ul>
