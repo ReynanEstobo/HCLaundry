@@ -218,12 +218,13 @@ export default function Staff() {
             full_name: form.full_name,
             phone: form.phone,
             contact_email: form.email,
+            role: form.role,
             branch: form.branch,
             position: form.position,
           }),
         });
         setIssuedCredentials(result.credentials);
-        toast.success("Staff account provisioned. Save the credentials now.");
+        toast.success(`${form.role === "admin" ? "Administrator" : "Staff"} account provisioned. Save the credentials now.`);
       } catch (error) {
         setSaving(false);
         return toast.error(error.message || "Unable to provision the staff account.");
@@ -324,7 +325,7 @@ export default function Staff() {
         {/* ADD BUTTON */}
         <button className="btn btn-primary" onClick={openNew}>
           <Plus size={18} />
-          Add Staff
+          Add Account
         </button>
       </div>
 
@@ -508,7 +509,7 @@ export default function Staff() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             {/* HEADER */}
             <div className="modal-header">
-              <h3>{editing ? "Edit Staff" : "Add Staff"}</h3>
+              <h3>{editing ? "Edit Account" : "Add Account"}</h3>
 
               <button className="btn-icon" onClick={() => setShowModal(false)}>
                 <X size={20} />
@@ -561,7 +562,7 @@ export default function Staff() {
                 {/* EMAIL */}
                 <div className="form-group">
                   <label>
-                    Contact email{" "}
+                    Contact email{form.role === "admin" ? " *" : " "}
                     <span
                       style={{
                         fontSize: 11,
@@ -569,7 +570,7 @@ export default function Staff() {
                         color: "var(--text-muted)",
                       }}
                     >
-                      (optional; not used for login)
+                      {form.role === "admin" ? "(required for password recovery; not used for login)" : "(optional; not used for login)"}
                     </span>
                   </label>
 
@@ -578,6 +579,7 @@ export default function Staff() {
                     type="email"
                     placeholder="staff@example.com"
                     value={form.email}
+                    required={form.role === "admin"}
                     onChange={(e) =>
                       setForm((f) => ({
                         ...f,
@@ -588,7 +590,7 @@ export default function Staff() {
                   />
                 </div>
 
-                {/* POSITION + BRANCH */}
+                {/* POSITION + STAFF BRANCH */}
                 <div className="form-row">
                   {/* POSITION */}
                   <div className="form-group">
@@ -608,8 +610,8 @@ export default function Staff() {
                     />
                   </div>
 
-                  {/* BRANCH */}
-                  <div className="form-group">
+                  {/* Administrators are global; a branch selector only applies to staff. */}
+                  {form.role === "staff" && <div className="form-group">
                     <label>Assigned Branch *</label>
 
                     <select
@@ -629,7 +631,7 @@ export default function Staff() {
                         </option>
                       ))}
                     </select>
-                  </div>
+                  </div>}
                 </div>
 
                 {/* ROLE */}
@@ -639,7 +641,6 @@ export default function Staff() {
                   <select
                     className="form-control"
                     value={form.role}
-                    disabled={!editing}
                     onChange={(e) =>
                       setForm((f) => ({
                         ...f,
@@ -654,6 +655,11 @@ export default function Staff() {
                       </option>
                     ))}
                   </select>
+                  {form.role === "admin" && !editing && (
+                    <p style={{ margin: "8px 0 0", color: "var(--text-muted)", fontSize: 12, lineHeight: 1.45 }}>
+                      Administrators are global accounts with no branch assignment. They can access all branches, reports, settings, staff accounts, and the Recycle Bin. Only create this role for a trusted owner or manager.
+                    </p>
+                  )}
                 </div>
 
                 {/* Passwords are generated and reset only through the provisioning workflow. */}
@@ -760,22 +766,23 @@ export default function Staff() {
         <div className="modal-overlay" onClick={() => setIssuedCredentials(null)}>
           <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 480 }}>
             <div className="modal-header">
-              <h3>Staff credentials created</h3>
+              <h3>{issuedCredentials.role === "admin" ? "Administrator" : "Staff"} credentials created</h3>
               <button className="btn-icon" onClick={() => setIssuedCredentials(null)}><X size={20} /></button>
             </div>
             <div className="modal-body">
               <p style={{ marginTop: 0, color: "var(--text-muted)", lineHeight: 1.55 }}>
-                Give these credentials to the staff member securely. The temporary password is shown only now and must be changed at first sign-in.
+                Give these credentials to the account holder securely. The temporary password is shown only now and must be changed at first sign-in.
               </p>
               <div className="card" style={{ padding: 16, background: "var(--bg-body)" }}>
-                <p><strong>Staff ID:</strong> {issuedCredentials.staffCode}</p>
+                <p><strong>Account ID:</strong> {issuedCredentials.staffCode}</p>
+                <p><strong>Role:</strong> {issuedCredentials.role === "admin" ? "Administrator" : "Staff"}</p>
                 <p><strong>Username:</strong> {issuedCredentials.username}</p>
                 <p><strong>Temporary password:</strong> <code style={{ fontSize: 15, userSelect: "all" }}>{issuedCredentials.temporaryPassword}</code></p>
-                <p style={{ marginBottom: 0 }}><strong>Assigned branch:</strong> {issuedCredentials.branch}</p>
+                {issuedCredentials.branch && <p style={{ marginBottom: 0 }}><strong>Assigned branch:</strong> {issuedCredentials.branch}</p>}
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => navigator.clipboard?.writeText(`H&C Laundry\nStaff ID: ${issuedCredentials.staffCode}\nUsername: ${issuedCredentials.username}\nTemporary password: ${issuedCredentials.temporaryPassword}\nBranch: ${issuedCredentials.branch}`).then(() => toast.success("Credentials copied."))}>Copy credentials</button>
+              <button className="btn btn-secondary" onClick={() => navigator.clipboard?.writeText(`H&C Laundry\nAccount ID: ${issuedCredentials.staffCode}\nRole: ${issuedCredentials.role === "admin" ? "Administrator" : "Staff"}\nUsername: ${issuedCredentials.username}\nTemporary password: ${issuedCredentials.temporaryPassword}${issuedCredentials.branch ? `\nBranch: ${issuedCredentials.branch}` : ""}`).then(() => toast.success("Credentials copied."))}>Copy credentials</button>
               <button className="btn btn-primary" onClick={() => setIssuedCredentials(null)}>I saved them</button>
             </div>
           </div>

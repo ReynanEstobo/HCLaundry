@@ -17,14 +17,14 @@ async function identityFor(user) {
 
 export async function login({ identifier, email, password }) {
   const submittedIdentifier = String(identifier || email || '').trim()
-  if (!submittedIdentifier || !password) throw Object.assign(new Error('Staff ID or username and password are required'), { status: 400 })
+  if (!submittedIdentifier || !password) throw Object.assign(new Error('Account ID or username and password are required'), { status: 400 })
   let authEmail = submittedIdentifier
   if (!submittedIdentifier.includes('@')) {
     let staffQuery = database
       .from('staff')
       .select('email')
       .is('deleted_at', null)
-    staffQuery = submittedIdentifier.toUpperCase().startsWith('HC-STAFF-')
+    staffQuery = /^HC-(?:STAFF|ADMIN)-/i.test(submittedIdentifier)
       ? staffQuery.eq('staff_code', submittedIdentifier.toUpperCase())
       : staffQuery.ilike('username', submittedIdentifier)
     const { data: staff, error: staffError } = await staffQuery.maybeSingle()
@@ -133,7 +133,7 @@ async function findResetAccount(identifier) {
   const value = String(identifier || '').trim()
   if (!value) return null
   let query = database.from('staff').select('id, auth_id, email, contact_email, deleted_at').is('deleted_at', null)
-  query = value.includes('@') ? query.or(`email.eq.${value},contact_email.eq.${value}`) : value.toUpperCase().startsWith('HC-STAFF-') ? query.eq('staff_code', value.toUpperCase()) : query.ilike('username', value)
+  query = value.includes('@') ? query.or(`email.eq.${value},contact_email.eq.${value}`) : /^HC-(?:STAFF|ADMIN)-/i.test(value) ? query.eq('staff_code', value.toUpperCase()) : query.ilike('username', value)
   const { data, error } = await query.maybeSingle()
   if (error) throw Object.assign(new Error(error.message), { status: 400 })
   if (!data?.auth_id) return null

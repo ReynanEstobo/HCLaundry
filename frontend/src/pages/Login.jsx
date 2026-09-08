@@ -74,9 +74,9 @@ export default function Login() {
             )}
 
             <form onSubmit={handleSubmit} className="login-form">
-              {/* Staff identifier */}
+              {/* Account identifier */}
               <div className="login-field">
-                <label>Staff ID or Username</label>
+                <label>Account ID or Username</label>
                 <div className="login-input-wrap">
                   <UserRound size={15} className="login-input-icon" />
                   <input

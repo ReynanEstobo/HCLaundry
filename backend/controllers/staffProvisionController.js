@@ -39,8 +39,9 @@ async function uniqueUsername(name) {
   throw Object.assign(new Error('Could not generate a unique username. Try a more specific staff name.'), { status: 409 })
 }
 
-function newStaffCode() {
-  return `HC-STAFF-${randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase()}`
+function newAccountCode(role = 'staff') {
+  const prefix = role === 'admin' ? 'HC-ADMIN' : 'HC-STAFF'
+  return `${prefix}-${randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase()}`
 }
 
 function internalAuthEmail(username) {
@@ -63,9 +64,22 @@ async function writeAudit(action, staff, actorStaffId, before = {}, after = {}) 
 export async function provisionStaff(body, identity) {
   const fullName = cleanName(body?.full_name)
   if (!fullName) throw Object.assign(new Error('Full name is required.'), { status: 400 })
-  const branch = await resolveBranch(body?.branch)
+  const role = ['admin', 'staff'].includes(String(body?.role || '').toLowerCase())
+    ? String(body.role).toLowerCase()
+    : 'staff'
+  const contactEmail = String(body?.contact_email || '').trim() || null
+  if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+    throw Object.assign(new Error('Enter a valid contact email address.'), { status: 400 })
+  }
+  // An administrator needs a recovery channel for password verification.
+  if (role === 'admin' && !contactEmail) {
+    throw Object.assign(new Error('A contact email is required for an administrator account.'), { status: 400 })
+  }
+  // Only staff are attached to a branch. Administrators are global accounts
+  // and must never acquire a branch scope that could be mistaken for a limit.
+  const branch = role === 'staff' ? await resolveBranch(body?.branch) : null
   const username = await uniqueUsername(fullName)
-  const staffCode = newStaffCode()
+  const staffCode = newAccountCode(role)
   const temporaryPassword = generatePassword()
   const authEmail = internalAuthEmail(username)
 
@@ -73,7 +87,7 @@ export async function provisionStaff(body, identity) {
     email: authEmail,
     password: temporaryPassword,
     email_confirm: true,
-    user_metadata: { full_name: fullName, staff_code: staffCode, username },
+    user_metadata: { full_name: fullName, staff_code: staffCode, username, role },
   })
   if (authError || !auth.user) throw Object.assign(new Error(authError?.message || 'Could not create the staff sign-in account.'), { status: 400 })
 
@@ -83,11 +97,11 @@ export async function provisionStaff(body, identity) {
     username,
     full_name: fullName,
     phone: String(body?.phone || '').trim() || null,
-    contact_email: String(body?.contact_email || '').trim() || null,
+    contact_email: contactEmail,
     email: authEmail,
-    role: 'staff',
-    branch: branch.name,
-    branch_id: branch.id,
+    role,
+    branch: branch?.name || null,
+    branch_id: branch?.id || null,
     position: String(body?.position || '').trim() || null,
     must_change_password: true,
     credentials_issued_at: new Date().toISOString(),
@@ -99,9 +113,9 @@ export async function provisionStaff(body, identity) {
     throw Object.assign(new Error(staffError.message), { status: 400 })
   }
 
-  await writeAudit('provision', staff, identity.staffId, {}, { staff_code: staffCode, username, branch: branch.name, role: 'staff' })
+  await writeAudit('provision', staff, identity.staffId, {}, { staff_code: staffCode, username, branch: branch?.name || null, role })
   events.emit('change', { table: 'staff' })
-  return { staff, credentials: { staffCode, username, temporaryPassword, branch: branch.name } }
+  return { staff, credentials: { staffCode, username, temporaryPassword, branch: branch?.name || null, role } }
 }
 
 export async function resetStaffCredentials(body, identity) {
@@ -113,7 +127,7 @@ export async function resetStaffCredentials(body, identity) {
   let account = staff
   if (!staff.staff_code || !staff.username) {
     const username = staff.username || await uniqueUsername(staff.full_name)
-    const staffCode = staff.staff_code || newStaffCode()
+    const staffCode = staff.staff_code || newAccountCode(staff.role)
     const { data: upgraded, error: upgradeError } = await database.from('staff').update({ staff_code: staffCode, username }).eq('id', staff.id).select('*').single()
     if (upgradeError) throw Object.assign(new Error(upgradeError.message), { status: 400 })
     account = upgraded
@@ -122,7 +136,7 @@ export async function resetStaffCredentials(body, identity) {
   const temporaryPassword = generatePassword()
   const { error: authError } = await database.auth.admin.updateUserById(account.auth_id, {
     password: temporaryPassword,
-    user_metadata: { staff_code: account.staff_code, username: account.username, full_name: account.full_name },
+    user_metadata: { staff_code: account.staff_code, username: account.username, full_name: account.full_name, role: account.role },
   })
   if (authError) throw Object.assign(new Error(authError.message), { status: 400 })
   const { data: updated, error: updateError } = await database.from('staff').update({
@@ -134,7 +148,7 @@ export async function resetStaffCredentials(body, identity) {
 
   await writeAudit('credentials_reset', updated, identity.staffId, { must_change_password: staff.must_change_password }, { must_change_password: true })
   events.emit('change', { table: 'staff' })
-  return { credentials: { staffCode: updated.staff_code, username: updated.username, temporaryPassword, branch: updated.branch } }
+  return { credentials: { staffCode: updated.staff_code, username: updated.username, temporaryPassword, branch: updated.branch, role: updated.role } }
 }
 
 export async function updateProvisionedStaff(body, identity) {
@@ -143,20 +157,29 @@ export async function updateProvisionedStaff(body, identity) {
   if (!staffId || !fullName) throw Object.assign(new Error('Staff member and full name are required.'), { status: 400 })
   const { data: existing, error: existingError } = await database.from('staff').select('*').eq('id', staffId).is('deleted_at', null).maybeSingle()
   if (existingError || !existing) throw Object.assign(new Error('Active staff member not found.'), { status: 404 })
-  const branch = await resolveBranch(body?.branch)
-  const role = ['admin', 'staff'].includes(String(body?.role || '')) ? body.role : existing.role
+  const role = ['admin', 'staff'].includes(String(body?.role || '').toLowerCase())
+    ? String(body.role).toLowerCase()
+    : existing.role
+  const contactEmail = String(body?.contact_email || '').trim() || null
+  if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+    throw Object.assign(new Error('Enter a valid contact email address.'), { status: 400 })
+  }
+  if (role === 'admin' && !contactEmail) {
+    throw Object.assign(new Error('A contact email is required for an administrator account.'), { status: 400 })
+  }
+  const branch = role === 'staff' ? await resolveBranch(body?.branch) : null
   const updates = {
     full_name: fullName,
     phone: String(body?.phone || '').trim() || null,
-    contact_email: String(body?.contact_email || '').trim() || null,
+    contact_email: contactEmail,
     position: String(body?.position || '').trim() || null,
     role,
-    branch: branch.name,
-    branch_id: branch.id,
+    branch: branch?.name || null,
+    branch_id: branch?.id || null,
   }
   const { data: updated, error: updateError } = await database.from('staff').update(updates).eq('id', staffId).select('*').single()
   if (updateError) throw Object.assign(new Error(updateError.message), { status: 400 })
-  await writeAudit('update', updated, identity.staffId, { role: existing.role, branch: existing.branch }, { role, branch: branch.name })
+  await writeAudit('update', updated, identity.staffId, { role: existing.role, branch: existing.branch }, { role, branch: branch?.name || null })
   events.emit('change', { table: 'staff' })
   return { staff: updated }
 }
