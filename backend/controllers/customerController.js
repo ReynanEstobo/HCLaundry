@@ -36,20 +36,28 @@ export async function lookupCustomer(phone, identity) {
   const { data, error } = await database.rpc('find_customer_by_phone', { p_phone: phone })
   if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
   const customer = data?.[0]
-  if (!customer) return { exists: false, visible: false, customer: null, loyalty: { availableRewards: [] } }
-  // Reward availability is global to the central customer identity, while the
-  // directory itself remains branch-scoped. Exact-phone order lookup is the
-  // only staff path that exposes these claims, so a staff member can redeem a
-  // customer's own reward at any branch without browsing other clients.
+  if (!customer) return { exists: false, visible: false, customer: null, loyalty: { nextReward: null } }
+  // Loyalty progression is global to the central customer identity, while the
+  // directory itself remains branch-scoped. The server calculates the next
+  // qualifying reward; staff cannot select, create, or override one.
   await database.rpc('expire_customer_loyalty_rewards', { p_customer_id: customer.id })
-  const { data: rewards, error: rewardsError } = await database
-    .from('loyalty_rewards')
-    .select('id, reward_type, discount_percent, free_load_kg, expires_at, earned_at')
-    .eq('customer_id', customer.id)
-    .eq('status', 'available')
-    .order('earned_at', { ascending: true })
-  if (rewardsError) throw Object.assign(new Error(rewardsError.message), { status: 400, details: rewardsError })
-  const loyalty = { availableRewards: rewards || [] }
+  const { data: loyaltySettings, error: settingsError } = await database.from('settings')
+    .select('loyalty_enabled, loyalty_discount_milestone, loyalty_free_load_milestone, loyalty_discount_percent, loyalty_program_started_at').maybeSingle()
+  if (settingsError) throw Object.assign(new Error(settingsError.message), { status: 400, details: settingsError })
+  let nextReward = null
+  if (loyaltySettings?.loyalty_enabled) {
+    const { data: completed, error: completedError } = await database.from('orders').select('id')
+      .eq('customer_id', customer.id).eq('status', 'released').eq('payment_status', 'paid')
+      .gte('picked_up_at', loyaltySettings.loyalty_program_started_at)
+    if (completedError) throw Object.assign(new Error(completedError.message), { status: 400, details: completedError })
+    const position = ((completed?.length || 0) % loyaltySettings.loyalty_free_load_milestone) + 1
+    if (position === loyaltySettings.loyalty_discount_milestone) {
+      nextReward = { reward_type: 'percentage_discount', discount_percent: loyaltySettings.loyalty_discount_percent }
+    } else if (position === loyaltySettings.loyalty_free_load_milestone) {
+      nextReward = { reward_type: 'free_load', free_load_kg: 8 }
+    }
+  }
+  const loyalty = { nextReward }
   if (identity.role === 'admin') return { exists: true, visible: true, customer, loyalty }
   const { data: association } = await database.from('customer_branches').select('customer_id').eq('customer_id', customer.id).eq('branch_id', identity.branchId).maybeSingle()
   // The client directory remains branch-scoped, but an exact phone match in

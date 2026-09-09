@@ -222,8 +222,7 @@ export default function Orders() {
     : soapItems;
 
   const [phoneMatch, setPhoneMatch] = useState(null); // null = not searched, object = found, false = not found
-  const [loyaltyRewards, setLoyaltyRewards] = useState([]);
-  const [selectedLoyaltyRewardId, setSelectedLoyaltyRewardId] = useState("");
+  const [loyaltyPreview, setLoyaltyPreview] = useState(null);
 
   function calcPrice(weight, addons) {
     if (!weight || weight <= 0) return 0;
@@ -388,8 +387,7 @@ export default function Orders() {
       addons: {},
     });
     setPhoneMatch(null);
-    setLoyaltyRewards([]);
-    setSelectedLoyaltyRewardId("");
+    setLoyaltyPreview(null);
     setShowModal(true);
   }
 
@@ -416,16 +414,14 @@ export default function Orders() {
       addons: order.addons || {},
     });
     setPhoneMatch(order.customers ? order.customers : null);
-    setLoyaltyRewards([]);
-    setSelectedLoyaltyRewardId("");
+    setLoyaltyPreview(null);
     setShowModal(true);
   }
 
   async function lookupPhone(phone) {
     if (!phone || phone.length < 4) {
       setPhoneMatch(null);
-      setLoyaltyRewards([]);
-      setSelectedLoyaltyRewardId("");
+      setLoyaltyPreview(null);
       return;
     }
     // Check the central customer directory. Only branch-visible customer details
@@ -438,8 +434,7 @@ export default function Orders() {
       return;
     }
     const data = result.customer || customers.find((customer) => customer.phone === phone) || null;
-    setLoyaltyRewards(result.loyalty?.availableRewards || []);
-    setSelectedLoyaltyRewardId("");
+    setLoyaltyPreview(result.loyalty?.nextReward || null);
     if (data) {
       setPhoneMatch(data);
       setForm((f) => ({
@@ -493,8 +488,7 @@ export default function Orders() {
     }
 
     const rawTotal = calcPrice(weight, form.addons);
-    const selectedReward = loyaltyRewards.find((reward) => reward.id === selectedLoyaltyRewardId);
-    const total_price = loyaltyPrice(rawTotal, selectedReward);
+    const total_price = loyaltyPrice(rawTotal, loyaltyPreview);
     const amountPaid = parseFloat(form.amount_paid) || 0;
     const minRequired = total_price * 0.5;
 
@@ -547,7 +541,7 @@ export default function Orders() {
           },
           order: payload,
           addons: form.addons,
-          loyaltyRewardId: selectedReward?.id || null,
+          loyaltyRewardId: null,
         });
         orderData = result.data;
       } catch (createError) {
@@ -1667,26 +1661,10 @@ export default function Orders() {
 
                 {/* Price Breakdown */}
                 <div className="order-section">
-                  {!editing && loyaltyRewards.length > 0 && (
-                    <div className="form-group" style={{ marginBottom: 14 }}>
-                      <label>Loyalty reward</label>
-                      <select
-                        className="form-control"
-                        value={selectedLoyaltyRewardId}
-                        onChange={(event) => setSelectedLoyaltyRewardId(event.target.value)}
-                      >
-                        <option value="">Do not use a reward today</option>
-                        {loyaltyRewards.map((reward) => (
-                          <option key={reward.id} value={reward.id}>
-                            {reward.reward_type === "percentage_discount"
-                              ? `${reward.discount_percent}% off this entire order`
-                              : `One free ${reward.free_load_kg} kg standard load`}
-                          </option>
-                        ))}
-                      </select>
-                      <span style={{ display: "block", marginTop: 5, fontSize: 12, color: "var(--text-muted)" }}>
-                        Rewards work at every I&C Laundry branch and can only be used once.
-                      </span>
+                  {!editing && loyaltyPreview && (
+                    <div className="account-security-notice" style={{ marginBottom: 14 }}>
+                      <CheckCircle2 size={16} />
+                      <span><strong>Loyalty reward applied automatically:</strong> {loyaltyPreview.reward_type === "percentage_discount" ? `${loyaltyPreview.discount_percent}% off this entire order, including add-ons and excess kg.` : "one free 8 kg standard load; add-ons and excess kg remain payable."}</span>
                     </div>
                   )}
                   <div className="pricing-card">
@@ -1734,7 +1712,7 @@ export default function Orders() {
                       })}
                     {(() => {
                       const rawTotal = calcPrice(parseFloat(form.weight_kg) || 0, form.addons);
-                      const reward = loyaltyRewards.find((item) => item.id === selectedLoyaltyRewardId);
+                      const reward = loyaltyPreview;
                       const total = loyaltyPrice(rawTotal, reward);
                       return <>
                         {reward && <div className="pricing-row" style={{ color: "#047857", fontWeight: 700 }}>
@@ -1791,7 +1769,7 @@ export default function Orders() {
                       />
                       {(() => {
                         const rawTotal = calcPrice(parseFloat(form.weight_kg) || 0, form.addons);
-                        const reward = loyaltyRewards.find((item) => item.id === selectedLoyaltyRewardId);
+                        const reward = loyaltyPreview;
                         const total = loyaltyPrice(rawTotal, reward);
                         const paid = parseFloat(form.amount_paid) || 0;
                         const minRequired = total * 0.5;
