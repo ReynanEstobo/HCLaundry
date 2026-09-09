@@ -1,4 +1,4 @@
-# Configure I&C Laundry automated mail with `hclaundryhub@gmail.com`
+# Configure I&C Laundry automated mail with `iclaundryshop@gmail.com`
 
 This runbook changes the sender of production OTPs, order notifications, manual
 emails, and public contact-form messages. Do this during a quiet period because
@@ -7,7 +7,7 @@ cutover.
 
 ## What changes and what does not
 
-- The verified Gmail mailbox remains `hclaundryhub@gmail.com`; its customer-facing sender name is **I&C Laundry**.
+- The verified Gmail mailbox is `iclaundryshop@gmail.com`; its customer-facing sender name is **I&C Laundry**.
 - The public website and Notifications page show the new address.
 - Existing customer email addresses, staff contact emails, and internal
   `@accounts.hclaundry.local` login identities are not changed. They represent
@@ -18,7 +18,7 @@ cutover.
 
 ## 1. Prepare the new Gmail account
 
-1. Sign into `hclaundryhub@gmail.com`.
+1. Sign into `iclaundryshop@gmail.com`.
 2. Enable Google two-step verification.
 3. Create a Google App Password named `I&C Laundry local SMTP`. Keep the
    16-character value private. It is only for local Node testing; it is not
@@ -27,7 +27,7 @@ cutover.
 
 ## 2. Create the new Apps Script relay
 
-1. While signed into `hclaundryhub@gmail.com`, open
+1. While signed into `iclaundryshop@gmail.com`, open
    <https://script.google.com/home> and choose **New project**.
 2. Replace the default code with
    [`google-apps-script-email-relay.gs`](google-apps-script-email-relay.gs).
@@ -39,7 +39,7 @@ cutover.
    Keep this value private. It must exactly match the Cloudflare Worker secret
    in step 4.
 4. Click **Deploy** > **New deployment** > select **Web app**.
-5. Set **Execute as** to `hclaundryhub@gmail.com` / **Me**.
+5. Set **Execute as** to `iclaundryshop@gmail.com` / **Me**.
 6. Set access to the least broad option that still lets the Cloudflare Worker
    call it. For a standard Gmail account this is normally **Anyone**. The relay
    accepts only requests carrying the separate shared secret.
@@ -51,9 +51,9 @@ cutover.
 In the ignored `.env` file, set these values. Do not commit the file:
 
 ```dotenv
-GMAIL_EMAIL=hclaundryhub@gmail.com
+GMAIL_EMAIL=iclaundryshop@gmail.com
 GMAIL_APP_PASSWORD=<new Gmail app password>
-CONTACT_EMAIL=hclaundryhub@gmail.com
+CONTACT_EMAIL=iclaundryshop@gmail.com
 GOOGLE_APPS_SCRIPT_EMAIL_URL=<new Apps Script /exec URL>
 EMAIL_RELAY_SECRET=<same 32+ character relay secret>
 ```
@@ -85,13 +85,13 @@ deployment completed. Secrets set in Cloudflare are preserved across deploys.
 
 1. Use the production **Notifications** page to email a test inbox.
 2. Check the received message's **From** and **Reply-To** values. Both should
-   be `hclaundryhub@gmail.com` (the display name should be I&C Laundry).
+   be `iclaundryshop@gmail.com` (the display name should be I&C Laundry).
 3. Request one password-reset OTP for a test account; confirm delivery and the
    branded template.
 4. Create a UAT order with a test email and move it to Ready; confirm the
    ready-for-pickup email arrives once.
 5. Submit a test public contact form and confirm its message arrives at
-   `hclaundryhub@gmail.com`.
+   `iclaundryshop@gmail.com`.
 6. Check Worker logs for safe success/failure messages only; never log the OTP,
    app password, relay secret, or full email body.
 

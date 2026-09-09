@@ -320,7 +320,7 @@ Thank you for choosing I&C Laundry!
                     color: "var(--text-secondary)",
                   }}
                 >
-                  Email notifications are sent from hclaundryhub@gmail.com.
+                  Email notifications are sent from iclaundryshop@gmail.com.
                   Customers with email addresses will receive notifications when
                   their garments are ready for pickup.
                 </p>

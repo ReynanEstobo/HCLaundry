@@ -1,7 +1,7 @@
 /**
  * I&C Laundry email relay for Cloudflare Workers.
  *
- * Create this script while signed in as hclaundryhub@gmail.com. The account
+ * Create this script while signed in as iclaundryshop@gmail.com. The account
  * that owns the deployment is the Gmail sender. Never put the relay secret in
  * this file or in source control; save it in Script Properties instead.
  */
@@ -35,7 +35,7 @@ function doPost(event) {
     GmailApp.sendEmail(to, subject, body, {
       htmlBody: html || undefined,
       name: SENDER_NAME,
-      replyTo: 'hclaundryhub@gmail.com',
+      replyTo: 'iclaundryshop@gmail.com',
     });
     return response({ success: true });
   } catch (error) {

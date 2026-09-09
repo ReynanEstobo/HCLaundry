@@ -13,7 +13,7 @@ its secrets or deployment state. Email links continue to use this working URL.
 2. Deploy the application to the existing Worker using the established workflow.
 3. Update Google Apps Script from `docs/google-apps-script-email-relay.gs` and
    publish a new version of its existing deployment. Its sender name is I&C Laundry.
-   The verified sending mailbox remains `hclaundryhub@gmail.com`.
+   The verified sending mailbox is `iclaundryshop@gmail.com`.
 4. Check the browser title/icon, login page, report export, and an automated email.
    Check login with an existing account code and tracking with an existing receipt.
    New account codes and new order numbers should begin with IC.

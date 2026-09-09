@@ -813,7 +813,7 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <strong>Email</strong>
-                    <span>hclaundryhub@gmail.com</span>
+                    <span>iclaundryshop@gmail.com</span>
                   </div>
                 </div>
                 <div className="landing-contact-item">
@@ -950,7 +950,7 @@ export default function LandingPage() {
               </div>
               <div className="landing-footer-contact-item">
                 <Mail size={18} />
-                <span>hclaundryhub@gmail.com</span>
+                <span>iclaundryshop@gmail.com</span>
               </div>
               <div className="landing-footer-contact-item">
                 <MapPin size={18} />
