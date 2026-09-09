@@ -60,12 +60,13 @@ const ratePolicies = {
   'POST:public/contact': { limit: 3, windowMs: 15 * 60 * 1000 },
   'GET:public/orders/track': { limit: 30, windowMs: 60 * 1000 },
 }
+// Applies to every API route before it reaches authentication, Supabase, or an
+// email provider. It is intentionally keyed by Cloudflare's trusted client IP
+// so a forged bearer token cannot evade it. Route-specific policies above add
+// stricter limits for sensitive or expensive actions.
+const generalApiPolicy = { limit: 180, windowMs: 60 * 1000 }
 
-async function enforceRateLimit(request, env, path) {
-  const policy = ratePolicies[`${request.method}:${path}`]
-  if (!policy) return
-  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
-  const key = `${request.method}:${path}:${ip}`
+async function consumeRateLimit(env, key, policy) {
   const stub = env.RATE_LIMITER.get(env.RATE_LIMITER.idFromName(key))
   const result = await (await stub.fetch('https://rate-limiter/check', {
     method: 'POST', body: JSON.stringify(policy), headers: { 'Content-Type': 'application/json' },
@@ -75,6 +76,14 @@ async function enforceRateLimit(request, env, path) {
       status: 429, retryAfterSeconds: result.retryAfterSeconds,
     })
   }
+}
+
+async function enforceRateLimit(request, env, path) {
+  if (request.method === 'OPTIONS' || path === 'health') return
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown'
+  await consumeRateLimit(env, `api:${ip}`, generalApiPolicy)
+  const policy = ratePolicies[`${request.method}:${path}`]
+  if (policy) await consumeRateLimit(env, `route:${request.method}:${path}:${ip}`, policy)
 }
 
 /**

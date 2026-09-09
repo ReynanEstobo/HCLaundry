@@ -126,6 +126,12 @@ test('security journey: rate limiter blocks requests after the configured limit'
   assert.equal(third.allowed, false)
 })
 
+test('security journey: the general API limiter protects every non-health endpoint', async () => {
+  const response = await worker.fetch(new Request('https://test.iclaundry.local/api/not-a-real-endpoint'), testEnv({ allowed: false }))
+  assert.equal(response.status, 429)
+  assert.match((await response.json()).error, /Too many requests/)
+})
+
 test('staff journey: a staff member cannot transition an order from another branch', async t => {
   let rpcCalled = false
   withDatabaseMocks(t, {
