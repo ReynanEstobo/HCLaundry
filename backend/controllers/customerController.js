@@ -36,12 +36,25 @@ export async function lookupCustomer(phone, identity) {
   const { data, error } = await database.rpc('find_customer_by_phone', { p_phone: phone })
   if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
   const customer = data?.[0]
-  if (!customer) return { exists: false, visible: false, customer: null }
-  if (identity.role === 'admin') return { exists: true, visible: true, customer }
+  if (!customer) return { exists: false, visible: false, customer: null, loyalty: { availableRewards: [] } }
+  // Reward availability is global to the central customer identity, while the
+  // directory itself remains branch-scoped. Exact-phone order lookup is the
+  // only staff path that exposes these claims, so a staff member can redeem a
+  // customer's own reward at any branch without browsing other clients.
+  await database.rpc('expire_customer_loyalty_rewards', { p_customer_id: customer.id })
+  const { data: rewards, error: rewardsError } = await database
+    .from('loyalty_rewards')
+    .select('id, reward_type, discount_percent, free_load_kg, expires_at, earned_at')
+    .eq('customer_id', customer.id)
+    .eq('status', 'available')
+    .order('earned_at', { ascending: true })
+  if (rewardsError) throw Object.assign(new Error(rewardsError.message), { status: 400, details: rewardsError })
+  const loyalty = { availableRewards: rewards || [] }
+  if (identity.role === 'admin') return { exists: true, visible: true, customer, loyalty }
   const { data: association } = await database.from('customer_branches').select('customer_id').eq('customer_id', customer.id).eq('branch_id', identity.branchId).maybeSingle()
   // The client directory remains branch-scoped, but an exact phone match in
   // the order form may safely hydrate the name/email to prevent duplicates.
-  return { exists: true, visible: Boolean(association), customer }
+  return { exists: true, visible: Boolean(association), customer, loyalty }
 }
 
 export async function registerCustomer(body, identity) {

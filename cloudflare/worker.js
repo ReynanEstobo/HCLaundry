@@ -11,6 +11,7 @@ import { askGemini, generateForecast, generateDecisionSupport } from '../backend
 import { resourceRoutes } from '../backend/routes/resourceRoutes.js'
 import { configureRuntimeEnv } from '../backend/config/supabase.js'
 import { requestEmailChange, confirmEmailChange } from '../backend/controllers/emailChangeController.js'
+import { listLoyaltyRewards, revokeLoyaltyReward } from '../backend/controllers/loyaltyController.js'
 
 const SECURITY_HEADERS = {
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests",
@@ -118,6 +119,8 @@ async function api(request, env) {
   if (method === 'POST' && path === 'orders/transition') return json(await transitionOrder(await body(request), await authenticate(request)))
   if (method === 'POST' && path === 'orders/cancel') return json(await cancelOrder(await body(request), await authenticate(request)))
   if (method === 'POST' && path === 'inventory/restock') return json(await restockInventory(await body(request), await authenticate(request)))
+  if (method === 'GET' && path === 'loyalty/rewards') return json(await listLoyaltyRewards(await authenticate(request)))
+  if (method === 'POST' && path === 'loyalty/revoke') return json(await revokeLoyaltyReward(await body(request), await authenticate(request)))
   if (method === 'GET' && path === 'customers/visible') return json(await listVisibleCustomers(await authenticate(request)))
   if (method === 'GET' && path === 'customers/lookup') return json(await lookupCustomer(url.searchParams.get('phone'), await authenticate(request)))
   if (method === 'POST' && path === 'customers/register') return json(await registerCustomer(await body(request), await authenticate(request)))

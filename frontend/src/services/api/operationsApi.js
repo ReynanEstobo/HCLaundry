@@ -27,3 +27,11 @@ export async function lookupCustomerByPhone(phone) {
 export async function registerBranchCustomer(payload) {
   return apiFetch('/api/customers/register', { method: 'POST', body: JSON.stringify(payload) })
 }
+
+export async function getLoyaltyRewards() {
+  return apiFetch('/api/loyalty/rewards')
+}
+
+export async function revokeLoyaltyReward(rewardId, reason) {
+  return apiFetch('/api/loyalty/revoke', { method: 'POST', body: JSON.stringify({ rewardId, reason }) })
+}

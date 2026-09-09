@@ -14,6 +14,7 @@ import { askGemini, generateForecast, generateDecisionSupport } from './services
 import { events } from './services/realtimeService.js'
 import { resourceRoutes } from './routes/resourceRoutes.js'
 import { requestEmailChange, confirmEmailChange } from './controllers/emailChangeController.js'
+import { listLoyaltyRewards, revokeLoyaltyReward } from './controllers/loyaltyController.js'
 
 const port = Number(process.env.PORT || 3001)
 
@@ -71,6 +72,8 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && path === 'orders/transition') return write(response, 200, await transitionOrder(await readBody(request), await authenticate(request)))
     if (request.method === 'POST' && path === 'orders/cancel') return write(response, 200, await cancelOrder(await readBody(request), await authenticate(request)))
     if (request.method === 'POST' && path === 'inventory/restock') return write(response, 200, await restockInventory(await readBody(request), await authenticate(request)))
+    if (request.method === 'GET' && path === 'loyalty/rewards') return write(response, 200, await listLoyaltyRewards(await authenticate(request)))
+    if (request.method === 'POST' && path === 'loyalty/revoke') return write(response, 200, await revokeLoyaltyReward(await readBody(request), await authenticate(request)))
     if (request.method === 'GET' && path === 'customers/visible') return write(response, 200, await listVisibleCustomers(await authenticate(request)))
     if (request.method === 'GET' && path === 'customers/lookup') return write(response, 200, await lookupCustomer(url.searchParams.get('phone'), await authenticate(request)))
     if (request.method === 'POST' && path === 'customers/register') return write(response, 200, await registerCustomer(await readBody(request), await authenticate(request)))

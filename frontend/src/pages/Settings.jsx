@@ -21,6 +21,7 @@ import { supabase } from "../lib/supabase";
 import { apiFetch } from "../services/api/client";
 import LoadingButton from "../components/LoadingButton";
 import ChangeEmail from "../components/ChangeEmail";
+import { getLoyaltyRewards, revokeLoyaltyReward } from "../services/api/operationsApi";
 
 export default function Settings() {
   const { user, contactEmail } = useAuth();
@@ -66,6 +67,23 @@ export default function Settings() {
   const [etaBufferMinutes, setEtaBufferMinutes] = useState(15);
   const [etaMinCompletedOrders, setEtaMinCompletedOrders] = useState(5);
   const [statusUndoSeconds, setStatusUndoSeconds] = useState(60);
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(true);
+  const [loyaltyDiscountMilestone, setLoyaltyDiscountMilestone] = useState(5);
+  const [loyaltyFreeLoadMilestone, setLoyaltyFreeLoadMilestone] = useState(10);
+  const [loyaltyDiscountPercent, setLoyaltyDiscountPercent] = useState(50);
+  const [loyaltyRewardExpiryDays, setLoyaltyRewardExpiryDays] = useState(180);
+  const [loyaltyRewards, setLoyaltyRewards] = useState([]);
+  const [revokingRewardId, setRevokingRewardId] = useState("");
+
+  const loadLoyaltyRewards = async () => {
+    try {
+      const result = await getLoyaltyRewards();
+      setLoyaltyRewards(result.data || []);
+    } catch {
+      // Settings still works before the loyalty migration has been applied.
+      setLoyaltyRewards([]);
+    }
+  };
 
   useEffect(() => {
     async function loadSettings() {
@@ -91,10 +109,16 @@ export default function Settings() {
         setEtaBufferMinutes(data.eta_buffer_minutes ?? 15);
         setEtaMinCompletedOrders(data.eta_min_completed_orders ?? 5);
         setStatusUndoSeconds(data.status_undo_seconds ?? 60);
+        setLoyaltyEnabled(data.loyalty_enabled !== false);
+        setLoyaltyDiscountMilestone(data.loyalty_discount_milestone ?? 5);
+        setLoyaltyFreeLoadMilestone(data.loyalty_free_load_milestone ?? 10);
+        setLoyaltyDiscountPercent(data.loyalty_discount_percent ?? 50);
+        setLoyaltyRewardExpiryDays(data.loyalty_reward_expiry_days ?? 180);
       }
     }
 
     loadSettings();
+    loadLoyaltyRewards();
   }, []);
   useEffect(() => {
     const channel = supabase
@@ -123,6 +147,11 @@ export default function Settings() {
             setEtaBufferMinutes(data.eta_buffer_minutes ?? 15);
             setEtaMinCompletedOrders(data.eta_min_completed_orders ?? 5);
             setStatusUndoSeconds(data.status_undo_seconds ?? 60);
+            setLoyaltyEnabled(data.loyalty_enabled !== false);
+            setLoyaltyDiscountMilestone(data.loyalty_discount_milestone ?? 5);
+            setLoyaltyFreeLoadMilestone(data.loyalty_free_load_milestone ?? 10);
+            setLoyaltyDiscountPercent(data.loyalty_discount_percent ?? 50);
+            setLoyaltyRewardExpiryDays(data.loyalty_reward_expiry_days ?? 180);
           }
         },
       )
@@ -171,6 +200,11 @@ export default function Settings() {
 
   const handleSaveBusinessSettings = async () => {
     if (!settings?.id || settingsSaving) return;
+    if (Number(loyaltyDiscountMilestone) < 1 || Number(loyaltyFreeLoadMilestone) <= Number(loyaltyDiscountMilestone)
+      || Number(loyaltyDiscountPercent) < 1 || Number(loyaltyDiscountPercent) > 100 || Number(loyaltyRewardExpiryDays) < 1) {
+      toast.error("Check the loyalty milestones, percentage, and expiry period.");
+      return;
+    }
     setSettingsSaving(true);
     try {
       const { error } = await supabase
@@ -186,6 +220,11 @@ export default function Settings() {
           eta_buffer_minutes: Number(etaBufferMinutes),
           eta_min_completed_orders: Number(etaMinCompletedOrders),
           status_undo_seconds: Number(statusUndoSeconds),
+          loyalty_enabled: loyaltyEnabled,
+          loyalty_discount_milestone: Number(loyaltyDiscountMilestone),
+          loyalty_free_load_milestone: Number(loyaltyFreeLoadMilestone),
+          loyalty_discount_percent: Number(loyaltyDiscountPercent),
+          loyalty_reward_expiry_days: Number(loyaltyRewardExpiryDays),
         })
         .eq("id", settings.id);
       if (error) throw error;
@@ -200,6 +239,21 @@ export default function Settings() {
   const handleDarkModeToggle = () => {
     const next = !darkMode;
     setDarkMode(next);
+  };
+
+  const handleRevokeReward = async (reward) => {
+    const reason = window.prompt(`Why revoke this ${reward.reward_type === "free_load" ? "free-load" : "discount"} reward?`);
+    if (!reason?.trim()) return;
+    setRevokingRewardId(reward.id);
+    try {
+      await revokeLoyaltyReward(reward.id, reason.trim());
+      toast.success("Loyalty reward revoked and recorded.");
+      await loadLoyaltyRewards();
+    } catch (error) {
+      toast.error(error.message || "Could not revoke this reward.");
+    } finally {
+      setRevokingRewardId("");
+    }
   };
 
   const handleNotificationsToggle = () => {
@@ -539,6 +593,69 @@ export default function Settings() {
           >
             <Save size={15} /> Save ETA Settings
           </LoadingButton>
+        </div>
+
+        {/* ====== LOYALTY PROGRAM ====== */}
+        <div className="card settings-card">
+          <div className="settings-card-header">
+            <div className="settings-card-icon amber"><DollarSign size={20} /></div>
+            <div>
+              <h3>Customer Loyalty</h3>
+              <p>Cross-branch rewards are earned only when fully paid orders are released.</p>
+            </div>
+          </div>
+          <div className="settings-toggle-row">
+            <div className="settings-toggle-info">
+              <div>
+                <span className="settings-toggle-label">Enable loyalty rewards</span>
+                <span className="settings-toggle-desc">Staff can redeem only the customer’s available, single-use rewards.</span>
+              </div>
+            </div>
+            <button className={`settings-toggle ${loyaltyEnabled ? "active" : ""}`} onClick={() => setLoyaltyEnabled((value) => !value)}>
+              <div className="settings-toggle-knob" />
+            </button>
+          </div>
+          <div className="form-row" style={{ marginTop: 18 }}>
+            <div className="form-group">
+              <label>Discount reward after orders</label>
+              <input className="form-control" type="number" min="1" value={loyaltyDiscountMilestone} onChange={(e) => setLoyaltyDiscountMilestone(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Discount percentage</label>
+              <input className="form-control" type="number" min="1" max="100" value={loyaltyDiscountPercent} onChange={(e) => setLoyaltyDiscountPercent(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Free 8 kg load after orders</label>
+              <input className="form-control" type="number" min="2" value={loyaltyFreeLoadMilestone} onChange={(e) => setLoyaltyFreeLoadMilestone(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Reward expiry (days)</label>
+              <input className="form-control" type="number" min="1" value={loyaltyRewardExpiryDays} onChange={(e) => setLoyaltyRewardExpiryDays(e.target.value)} />
+            </div>
+          </div>
+          <div className="settings-pricing-preview">
+            <span>Every cycle: order #{loyaltyDiscountMilestone} earns {loyaltyDiscountPercent}% off the entire checkout; order #{loyaltyFreeLoadMilestone} earns one free 8 kg standard load.</span>
+          </div>
+          <LoadingButton className="btn btn-primary" loading={settingsSaving} loadingLabel="Saving…" onClick={handleSaveBusinessSettings} style={{ marginTop: 12 }}>
+            <Save size={15} /> Save Loyalty Program
+          </LoadingButton>
+          <div className="settings-divider" />
+          <h4 className="settings-subtitle">Issued rewards</h4>
+          {loyaltyRewards.length === 0 ? (
+            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>No loyalty rewards have been issued yet.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 8, maxHeight: 280, overflow: "auto" }}>
+              {loyaltyRewards.map((reward) => (
+                <div key={reward.id} style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", padding: 10, border: "1px solid var(--border-color)", borderRadius: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <strong style={{ display: "block", fontSize: 13 }}>{reward.customers?.name || "Customer"} · {reward.reward_type === "free_load" ? "Free 8 kg load" : `${reward.discount_percent}% off`}</strong>
+                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>Status: {reward.status} · Expires {new Date(reward.expires_at).toLocaleDateString("en-PH")}</span>
+                  </div>
+                  {reward.status === "available" && <LoadingButton className="btn btn-sm btn-secondary" loading={revokingRewardId === reward.id} loadingLabel="Revoking…" onClick={() => handleRevokeReward(reward)}>Revoke</LoadingButton>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       {passwordChanged && <div className="modal-overlay account-security-success-overlay" role="presentation">

@@ -15,7 +15,7 @@ async function resolveBranch(identity, requestedBranch) {
 }
 
 export async function createOrder(body, identity) {
-  const { customer = {}, order = {}, addons = {}, branch } = body || {}
+  const { customer = {}, order = {}, addons = {}, branch, loyaltyRewardId = null } = body || {}
   const selectedBranch = await resolveBranch(identity, branch)
   const weight = Number(order.weight_kg)
   const total = Number(order.total_price)
@@ -43,6 +43,7 @@ export async function createOrder(body, identity) {
     p_order: payload,
     p_addons: addons,
     p_loads: loads,
+    p_loyalty_reward_id: loyaltyRewardId || null,
   })
   if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
   return { data }
