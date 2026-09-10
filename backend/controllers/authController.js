@@ -27,6 +27,8 @@ const contactEmailRequired = recovery => Object.assign(new Error(recovery
   : 'No recovery email is bound to your account. Add one before requesting a password code.'), {
   status: 409, code: 'CONTACT_EMAIL_REQUIRED',
 })
+const FORGOT_PASSWORD_MESSAGE = 'If an active account has a recovery email, a verification code has been sent.'
+const invalidForgotPasswordCode = () => Object.assign(new Error('The verification code is invalid or expired. Request a new code and try again.'), { status: 400 })
 const literalPattern = value => value.replace(/[\\%_]/g, character => `\\${character}`)
 const isInternalAccountEmail = value => /@accounts\.(?:hc|ic)laundry\.local$/i.test(String(value || ''))
 
@@ -158,25 +160,55 @@ async function findResetAccount(identifier) {
   return { user: { id: data.auth_id }, staffId: data.id, email }
 }
 
+// Password recovery is public. Do not reveal whether a staff record exists or
+// has a recovery email; both details could otherwise be used to enumerate
+// employee accounts. Database failures still surface to operators normally.
+async function findPublicResetAccount(identifier) {
+  try {
+    return await findResetAccount(identifier)
+  } catch (error) {
+    if (error?.code === 'CONTACT_EMAIL_REQUIRED') return null
+    throw error
+  }
+}
+
 export async function requestForgotPasswordOtp({ identifier }) {
-  const account = await findResetAccount(identifier)
-  if (!account) throw accountNotFound()
-  await issuePasswordOtp({ userId: account.user.id, staffId: account.staffId, email: account.email })
-  return { success: true, cooldownSeconds: OTP_COOLDOWN_SECONDS, message: 'A verification code has been sent to your recovery email.' }
+  const account = await findPublicResetAccount(identifier)
+  if (account) {
+    try {
+      await issuePasswordOtp({ userId: account.user.id, staffId: account.staffId, email: account.email })
+    } catch (error) {
+      // A cooldown or delivery failure must look identical to an unknown
+      // account. The request-rate limit still protects the endpoint itself.
+      console.error('Forgot-password OTP could not be issued', error?.message)
+    }
+  }
+  return { success: true, cooldownSeconds: OTP_COOLDOWN_SECONDS, message: FORGOT_PASSWORD_MESSAGE }
 }
 
 export async function verifyForgotPasswordOtp({ identifier, otp }) {
-  const account = await findResetAccount(identifier)
-  if (!account) throw accountNotFound()
-  await verifyPasswordOtp(account, otp)
+  const account = await findPublicResetAccount(identifier)
+  if (!account) throw invalidForgotPasswordCode()
+  try {
+    await verifyPasswordOtp(account, otp)
+  } catch (error) {
+    if (error?.status === 400) throw invalidForgotPasswordCode()
+    throw error
+  }
   return { success: true }
 }
 
 export async function resetForgottenPassword({ identifier, otp, newPassword }) {
   if (!newPassword || newPassword.length < 10) throw Object.assign(new Error('Your new password must contain at least 10 characters.'), { status: 400 })
-  const account = await findResetAccount(identifier)
-  if (!account) throw accountNotFound()
-  const challenge = await verifyPasswordOtp(account, otp)
+  const account = await findPublicResetAccount(identifier)
+  if (!account) throw invalidForgotPasswordCode()
+  let challenge
+  try {
+    challenge = await verifyPasswordOtp(account, otp)
+  } catch (error) {
+    if (error?.status === 400) throw invalidForgotPasswordCode()
+    throw error
+  }
   const { error } = await database.auth.admin.updateUserById(account.user.id, { password: newPassword })
   if (error) throw Object.assign(new Error(error.message), { status: 400 })
   await database.from('password_change_otps').update({ consumed_at: new Date().toISOString() }).eq('id', challenge.id)

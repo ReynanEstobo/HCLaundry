@@ -328,6 +328,7 @@ export default function Settings() {
             <LoadingButton type="button" className="btn btn-secondary" disabled={passwordOtpCooldown.remaining > 0} onClick={requestPasswordOtp} loading={pwLoading} loadingLabel="Sending code…" style={{ width: '100%', marginBottom: 14 }}>
               <MailCheck size={16} /> {otpDestination ? passwordOtpCooldown.label : 'Send verification code'}
             </LoadingButton>
+            {passwordOtpCooldown.remaining > 0 && <p className="otp-cooldown-notice" role="status">{passwordOtpCooldown.message}</p>}
             {recoveryEmailMissing && <div className="otp-email-missing" role="alert">No recovery email is bound to your account. Use <strong>Change Bound Email</strong> below to add one before requesting an OTP.</div>}
             {otpDestination && <div className="account-security-notice" style={{ marginBottom: 14 }}><MailCheck size={16} /><span>Code sent to <strong>{otpDestination}</strong>. It expires in 10 minutes.</span></div>}
             <div className="form-group">

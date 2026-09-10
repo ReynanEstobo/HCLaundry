@@ -40,5 +40,6 @@ export default function useOtpCooldown(storageKey) {
     remaining,
     start: (seconds = 300) => setUntil(Date.now() + Math.max(0, Number(seconds) || 0) * 1000),
     label: remaining ? `Resend OTP in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : 'Resend verification code',
+    message: remaining ? `For security, you can request another OTP in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}.` : '',
   }
 }

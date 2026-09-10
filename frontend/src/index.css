@@ -119,6 +119,12 @@ body {
   font-size: 12px;
   font-weight: 600;
 }
+.otp-cooldown-notice {
+  margin: -6px 0 12px;
+  color: #527b91;
+  font-size: 12px;
+  font-weight: 600;
+}
 .otp-verification-success {
   margin: 0 0 14px;
   padding: 9px 11px;

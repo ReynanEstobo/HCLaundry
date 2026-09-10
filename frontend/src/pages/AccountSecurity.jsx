@@ -100,6 +100,7 @@ export default function AccountSecurity() {
         <LoadingButton type="button" className="account-security-code-button" disabled={cooldown.remaining > 0} onClick={requestCode} loading={sendingCode} loadingLabel="Sending verification code…">
           <MailCheck size={16} /> {destination ? cooldown.label : 'Send verification code'}
         </LoadingButton>
+        {cooldown.remaining > 0 && <p className="otp-cooldown-notice" role="status">{cooldown.message}</p>}
         {recoveryEmailMissing && <div className="otp-email-missing" role="alert">No recovery email is bound to your account. Use <strong>Change Bound Email</strong> below to add one before requesting an OTP.</div>}
         {destination && <div className="account-security-notice"><MailCheck size={16} /><span>Code sent to <strong>{destination}</strong>. It expires in 10 minutes.</span></div>}
         <div className="login-field" style={{ marginTop: 16 }}>

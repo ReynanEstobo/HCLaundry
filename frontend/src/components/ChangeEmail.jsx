@@ -87,6 +87,7 @@ export default function ChangeEmail({ onChanged }) {
     <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: '16px 0' }}>Confirm your current password, then verify a code sent to the new address. Your existing sign-in details stay the same.</p>
     {savedEmail && <div className="account-security-notice" role="status"><CheckCircle2 size={20} /><span>Email changed successfully. Future password codes will be sent to <strong>{savedEmail}</strong>. Request a fresh password code after this change.</span></div>}
     {error && <p role="alert" style={{ color: 'var(--danger, #b91c1c)' }}>{error}</p>}
+    {cooldown.remaining > 0 && <p className="otp-cooldown-notice" role="status">{cooldown.message}</p>}
     {!challenge ? <form onSubmit={sendCode}>
       <div className="form-group"><label htmlFor="bound-email">New email address</label><input id="bound-email" className="form-control" type="email" autoComplete="email" maxLength={254} value={email} onChange={event => setEmail(event.target.value)} disabled={Boolean(busy)} required /></div>
       <div className="form-group"><label htmlFor="bound-email-password">Current password</label><div className="settings-input-wrapper">

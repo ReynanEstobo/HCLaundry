@@ -39,8 +39,16 @@ test('Recycle Bin accounts cannot log in, recover passwords, or reuse sessions',
     await assert.rejects(login({identifier, password:'correct-password'}), missing)
   }
   for (const identifier of [row.username, row.staff_code, row.email, row.contact_email, 'unknown']) {
-    await assert.rejects(requestForgotPasswordOtp({identifier}), missing)
-    await assert.rejects(resetForgottenPassword({identifier, otp:'123456', newPassword:'new-password-long'}), missing)
+    const requestResult = await requestForgotPasswordOtp({ identifier })
+    assert.deepEqual(requestResult, {
+      success: true,
+      cooldownSeconds: 300,
+      message: 'If an active account has a recovery email, a verification code has been sent.',
+    })
+    await assert.rejects(
+      resetForgottenPassword({ identifier, otp: '123456', newPassword: 'new-password-long' }),
+      /verification code is invalid or expired/i,
+    )
   }
   assert.equal(signIns, 0)
   const request = new Request('https://example.test/api/auth/password/otp', {headers:{Authorization:'Bearer test-token'}})
