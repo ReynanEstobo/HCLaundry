@@ -5,6 +5,11 @@ import toast from 'react-hot-toast'
 import { apiFetch } from '../services/api/client'
 import LoadingButton from '../components/LoadingButton'
 import ChangeEmail from '../components/ChangeEmail'
+import useOtpCooldown from '../hooks/useOtpCooldown'
+import { clearOtpSession, readOtpSession, writeOtpSession } from '../utils/otpSession'
+
+const OTP_SESSION_KEY = 'ic-laundry:account-password-otp'
+const OTP_COOLDOWN_KEY = 'ic-laundry:account-password-otp-cooldown'
 
 function PasswordField({ label, value, onChange, visible, onToggle, placeholder, disabled }) {
   return <div className="login-field">
@@ -21,17 +26,19 @@ function PasswordField({ label, value, onChange, visible, onToggle, placeholder,
 
 export default function AccountSecurity() {
   const navigate = useNavigate()
+  const [savedRequest] = useState(() => readOtpSession(OTP_SESSION_KEY))
   const [newPassword, setNewPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [otp, setOtp] = useState('')
   const [otpStatus, setOtpStatus] = useState('idle')
   const [otpMessage, setOtpMessage] = useState('')
-  const [destination, setDestination] = useState('')
+  const [destination, setDestination] = useState(() => savedRequest?.destination || '')
   const [recoveryEmailMissing, setRecoveryEmailMissing] = useState(false)
   const [sendingCode, setSendingCode] = useState(false)
   const [saving, setSaving] = useState(false)
   const [passwordChanged, setPasswordChanged] = useState(false)
   const [visible, setVisible] = useState({ next: false, confirmation: false })
+  const cooldown = useOtpCooldown(OTP_COOLDOWN_KEY)
 
   async function requestCode() {
     setSendingCode(true)
@@ -39,10 +46,13 @@ export default function AccountSecurity() {
     try {
       const result = await apiFetch('/api/auth/password/otp', { method: 'POST' })
       setDestination(result.destination)
+      writeOtpSession(OTP_SESSION_KEY, { destination: result.destination })
+      cooldown.start(result.cooldownSeconds)
       setOtp(''); setOtpStatus('idle'); setOtpMessage(''); setNewPassword(''); setConfirmation('')
       toast.success(`Verification code sent to ${result.destination}`)
     } catch (error) {
       setRecoveryEmailMissing(error.data?.code === 'CONTACT_EMAIL_REQUIRED')
+      if (error.data?.retryAfterSeconds) cooldown.start(error.data.retryAfterSeconds)
       toast.error(error.message)
     } finally {
       setSendingCode(false)
@@ -69,6 +79,7 @@ export default function AccountSecurity() {
     setSaving(true)
     try {
       await apiFetch('/api/auth/password', { method: 'PATCH', body: JSON.stringify({ newPassword, otp }) })
+      clearOtpSession(OTP_SESSION_KEY)
       setPasswordChanged(true)
     } catch (error) {
       toast.error(error.message || 'Unable to change password.')
@@ -86,8 +97,8 @@ export default function AccountSecurity() {
       </div>
       <div className="account-security-steps" aria-label="Password change steps"><span className="active"><b>1</b> Request code</span><span className={otpStatus === 'valid' ? 'active' : ''}><b>2</b> Verify email</span><span className={otpStatus === 'valid' ? 'active' : ''}><b>3</b> New password</span></div>
       <form onSubmit={submit} className="login-form account-security-form">
-        <LoadingButton type="button" className="account-security-code-button" onClick={requestCode} loading={sendingCode} loadingLabel="Sending verification code…">
-          <MailCheck size={16} /> {destination ? 'Resend verification code' : 'Send verification code'}
+        <LoadingButton type="button" className="account-security-code-button" disabled={cooldown.remaining > 0} onClick={requestCode} loading={sendingCode} loadingLabel="Sending verification code…">
+          <MailCheck size={16} /> {destination ? cooldown.label : 'Send verification code'}
         </LoadingButton>
         {recoveryEmailMissing && <div className="otp-email-missing" role="alert">No recovery email is bound to your account. Use <strong>Change Bound Email</strong> below to add one before requesting an OTP.</div>}
         {destination && <div className="account-security-notice"><MailCheck size={16} /><span>Code sent to <strong>{destination}</strong>. It expires in 10 minutes.</span></div>}
@@ -106,7 +117,7 @@ export default function AccountSecurity() {
         <LoadingButton type="submit" className="btn btn-primary" disabled={otpStatus !== 'valid'} loading={saving} loadingLabel="Changing password…"><LockKeyhole size={16} /> Change password</LoadingButton>
       </form>
     </section>
-    <ChangeEmail onChanged={() => { setOtp(''); setDestination(''); setOtpStatus('idle') }} />
+    <ChangeEmail onChanged={() => { clearOtpSession(OTP_SESSION_KEY); setOtp(''); setDestination(''); setOtpStatus('idle') }} />
     {passwordChanged && <div className="modal-overlay account-security-success-overlay" role="presentation">
       <section className="account-security-success-dialog" role="alertdialog" aria-modal="true" aria-labelledby="password-success-title">
         <span className="account-security-success-icon"><CheckCircle2 size={32} /></span>

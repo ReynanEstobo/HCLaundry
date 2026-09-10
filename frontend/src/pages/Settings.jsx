@@ -21,10 +21,16 @@ import { supabase } from "../lib/supabase";
 import { apiFetch } from "../services/api/client";
 import LoadingButton from "../components/LoadingButton";
 import ChangeEmail from "../components/ChangeEmail";
+import useOtpCooldown from "../hooks/useOtpCooldown";
+import { clearOtpSession, readOtpSession, writeOtpSession } from "../utils/otpSession";
 import { getLoyaltyRewards, revokeLoyaltyReward } from "../services/api/operationsApi";
+
+const PASSWORD_OTP_SESSION_KEY = "ic-laundry:settings-password-otp";
+const PASSWORD_OTP_COOLDOWN_KEY = "ic-laundry:settings-password-otp-cooldown";
 
 export default function Settings() {
   const { user, contactEmail } = useAuth();
+  const [savedPasswordOtpRequest] = useState(() => readOtpSession(PASSWORD_OTP_SESSION_KEY));
 
   // Password change
   const [newPassword, setNewPassword] = useState("");
@@ -32,13 +38,14 @@ export default function Settings() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [passwordOtp, setPasswordOtp] = useState("");
-  const [otpDestination, setOtpDestination] = useState("");
+  const [otpDestination, setOtpDestination] = useState(() => savedPasswordOtpRequest?.destination || "");
   const [recoveryEmailMissing, setRecoveryEmailMissing] = useState(false);
   const [passwordOtpStatus, setPasswordOtpStatus] = useState("idle");
   const [passwordOtpMessage, setPasswordOtpMessage] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
   const [passwordChanged, setPasswordChanged] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const passwordOtpCooldown = useOtpCooldown(PASSWORD_OTP_COOLDOWN_KEY);
 
   const requestPasswordOtp = async () => {
     setPwLoading(true);
@@ -46,6 +53,8 @@ export default function Settings() {
     try {
       const result = await apiFetch('/api/auth/password/otp', { method: 'POST' });
       setOtpDestination(result.destination);
+      writeOtpSession(PASSWORD_OTP_SESSION_KEY, { destination: result.destination });
+      passwordOtpCooldown.start(result.cooldownSeconds);
       setPasswordOtp("");
       setPasswordOtpStatus("idle");
       setPasswordOtpMessage("");
@@ -54,6 +63,7 @@ export default function Settings() {
       toast.success(`Verification code sent to ${result.destination}`);
     } catch (error) {
       setRecoveryEmailMissing(error.data?.code === 'CONTACT_EMAIL_REQUIRED');
+      if (error.data?.retryAfterSeconds) passwordOtpCooldown.start(error.data.retryAfterSeconds);
       toast.error(error.message);
     } finally {
       setPwLoading(false);
@@ -212,6 +222,7 @@ export default function Settings() {
     setPwLoading(true);
     try {
       await apiFetch('/api/auth/password', { method: 'PATCH', body: JSON.stringify({ newPassword, otp: passwordOtp }) });
+      clearOtpSession(PASSWORD_OTP_SESSION_KEY);
       setNewPassword("");
       setConfirmPassword("");
       setPasswordOtp("");
@@ -314,8 +325,8 @@ export default function Settings() {
 
           <h4 className="settings-subtitle">Change Password</h4>
           <form onSubmit={handlePasswordChange}>
-            <LoadingButton type="button" className="btn btn-secondary" onClick={requestPasswordOtp} loading={pwLoading} loadingLabel="Sending code…" style={{ width: '100%', marginBottom: 14 }}>
-              <MailCheck size={16} /> {otpDestination ? 'Resend verification code' : 'Send verification code'}
+            <LoadingButton type="button" className="btn btn-secondary" disabled={passwordOtpCooldown.remaining > 0} onClick={requestPasswordOtp} loading={pwLoading} loadingLabel="Sending code…" style={{ width: '100%', marginBottom: 14 }}>
+              <MailCheck size={16} /> {otpDestination ? passwordOtpCooldown.label : 'Send verification code'}
             </LoadingButton>
             {recoveryEmailMissing && <div className="otp-email-missing" role="alert">No recovery email is bound to your account. Use <strong>Change Bound Email</strong> below to add one before requesting an OTP.</div>}
             {otpDestination && <div className="account-security-notice" style={{ marginBottom: 14 }}><MailCheck size={16} /><span>Code sent to <strong>{otpDestination}</strong>. It expires in 10 minutes.</span></div>}
@@ -386,7 +397,7 @@ export default function Settings() {
         </div>
 
         {/* ====== APPEARANCE ====== */}
-        <ChangeEmail onChanged={() => { setPasswordOtp(''); setOtpDestination(''); setPasswordOtpStatus('idle'); }} />
+        <ChangeEmail onChanged={() => { clearOtpSession(PASSWORD_OTP_SESSION_KEY); setPasswordOtp(''); setOtpDestination(''); setPasswordOtpStatus('idle'); }} />
         <div className="card settings-card">
           <div className="settings-card-header">
             <div className="settings-card-icon purple">

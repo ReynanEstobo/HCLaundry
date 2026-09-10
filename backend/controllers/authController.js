@@ -18,6 +18,10 @@ async function identityFor(user) {
 }
 
 const accountNotFound = () => Object.assign(new Error('Account does not exist.'), { status: 404 })
+const OTP_COOLDOWN_SECONDS = 300
+const otpCooldown = retryAfterSeconds => Object.assign(new Error(`Please wait ${retryAfterSeconds} seconds before requesting another verification code.`), {
+  status: 429, code: 'OTP_COOLDOWN', retryAfterSeconds,
+})
 const contactEmailRequired = recovery => Object.assign(new Error(recovery
   ? 'This account does not have a recovery email. Ask an administrator to add one before resetting the password.'
   : 'No recovery email is bound to your account. Add one before requesting a password code.'), {
@@ -82,6 +86,12 @@ async function passwordVerificationEmail(identity) {
 }
 
 async function issuePasswordOtp({ userId, staffId, email }) {
+  const { data: recentChallenge, error: cooldownError } = await database
+    .from('password_change_otps').select('requested_at').eq('auth_user_id', userId)
+    .order('requested_at', { ascending: false }).limit(1).maybeSingle()
+  if (cooldownError) throw Object.assign(new Error(cooldownError.message), { status: 400 })
+  const elapsedSeconds = recentChallenge ? Math.floor((Date.now() - new Date(recentChallenge.requested_at).getTime()) / 1000) : OTP_COOLDOWN_SECONDS
+  if (elapsedSeconds < OTP_COOLDOWN_SECONDS) throw otpCooldown(OTP_COOLDOWN_SECONDS - elapsedSeconds)
   const code = String(randomInt(100000, 1000000))
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
   const { error: closeError } = await database
@@ -108,7 +118,7 @@ async function issuePasswordOtp({ userId, staffId, email }) {
     await database.from('password_change_otps').update({ consumed_at: new Date().toISOString() }).eq('id', challenge.id)
     throw sendError
   }
-  return { success: true, expiresInSeconds: 600, destination: email.replace(/^(.{2}).+(@.+)$/, '$1***$2') }
+  return { success: true, expiresInSeconds: 600, cooldownSeconds: OTP_COOLDOWN_SECONDS, destination: email.replace(/^(.{2}).+(@.+)$/, '$1***$2') }
 }
 
 export async function requestPasswordOtp(_body, identity) {
@@ -152,7 +162,7 @@ export async function requestForgotPasswordOtp({ identifier }) {
   const account = await findResetAccount(identifier)
   if (!account) throw accountNotFound()
   await issuePasswordOtp({ userId: account.user.id, staffId: account.staffId, email: account.email })
-  return { success: true, message: 'A verification code has been sent to your recovery email.' }
+  return { success: true, cooldownSeconds: OTP_COOLDOWN_SECONDS, message: 'A verification code has been sent to your recovery email.' }
 }
 
 export async function verifyForgotPasswordOtp({ identifier, otp }) {

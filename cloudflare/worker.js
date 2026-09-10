@@ -162,6 +162,7 @@ export default {
         return json({
           error: status >= 500 ? 'Internal server error' : (error?.message || 'Request failed'),
           code: status >= 500 ? undefined : error?.code,
+          retryAfterSeconds: status >= 500 ? undefined : error?.retryAfterSeconds,
         }, status)
       }
   },

@@ -91,7 +91,7 @@ const server = http.createServer(async (request, response) => {
     return write(response, 404, { error: 'Endpoint not found' })
   } catch (error) {
     console.error(error)
-    return write(response, error.status || 500, { error: error.message || 'Internal server error', code: error.code, details: error.details })
+    return write(response, error.status || 500, { error: error.message || 'Internal server error', code: error.code, retryAfterSeconds: error.retryAfterSeconds, details: error.details })
   }
 })
 

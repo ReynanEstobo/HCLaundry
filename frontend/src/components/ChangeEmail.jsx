@@ -3,19 +3,26 @@ import { CheckCircle2, Eye, EyeOff, MailCheck } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { apiFetch } from '../services/api/client'
 import LoadingButton from './LoadingButton'
+import useOtpCooldown from '../hooks/useOtpCooldown'
+import { clearOtpSession, readOtpSession, writeOtpSession } from '../utils/otpSession'
+
+const OTP_SESSION_KEY = 'ic-laundry:change-email-otp'
+const OTP_COOLDOWN_KEY = 'ic-laundry:change-email-otp-cooldown'
 
 export default function ChangeEmail({ onChanged }) {
   const { user, contactEmail, refreshProfile } = useAuth()
+  const [savedChallenge] = useState(() => readOtpSession(OTP_SESSION_KEY))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [visible, setVisible] = useState(false)
-  const [challenge, setChallenge] = useState(null)
+  const [challenge, setChallenge] = useState(() => savedChallenge?.challengeId && savedChallenge?.destination ? { challengeId: savedChallenge.challengeId, destination: savedChallenge.destination } : null)
   const [otp, setOtp] = useState('')
   const [otpStatus, setOtpStatus] = useState('idle')
   const [otpMessage, setOtpMessage] = useState('')
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [savedEmail, setSavedEmail] = useState('')
+  const cooldown = useOtpCooldown(OTP_COOLDOWN_KEY)
   const current = savedEmail || contactEmail || (user?.email?.endsWith('.local') ? '' : user?.email)
 
   async function sendCode(event) {
@@ -28,11 +35,13 @@ export default function ChangeEmail({ onChanged }) {
         method: 'POST', body: JSON.stringify({ newEmail: email, currentPassword: password }),
       })
       setChallenge(result)
+      writeOtpSession(OTP_SESSION_KEY, { challengeId: result.challengeId, destination: result.destination })
+      cooldown.start(result.cooldownSeconds)
       setOtp('')
       setOtpStatus('idle')
       setOtpMessage('')
       setPassword('')
-    } catch (error) { setError(error.message) }
+    } catch (error) { if (error.data?.retryAfterSeconds) cooldown.start(error.data.retryAfterSeconds); setError(error.message) }
     finally { setBusy('') }
   }
 
@@ -60,6 +69,7 @@ export default function ChangeEmail({ onChanged }) {
       })
       setSavedEmail(result.contactEmail)
       setChallenge(null)
+      clearOtpSession(OTP_SESSION_KEY)
       setEmail('')
       setOtp('')
       onChanged?.()
@@ -83,14 +93,14 @@ export default function ChangeEmail({ onChanged }) {
         <input id="bound-email-password" className="form-control" type={visible ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} disabled={Boolean(busy)} style={{ paddingRight: 42 }} required />
         <button type="button" className="settings-eye-btn" aria-label={visible ? 'Hide password' : 'Show password'} onClick={() => setVisible(!visible)}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button>
       </div></div>
-      <LoadingButton type="submit" className="btn btn-primary" loading={busy === 'send'} loadingLabel="Sending code...">Send code to new email</LoadingButton>
+      <LoadingButton type="submit" className="btn btn-primary" disabled={cooldown.remaining > 0} loading={busy === 'send'} loadingLabel="Sending code...">{cooldown.remaining ? cooldown.label : 'Send code to new email'}</LoadingButton>
     </form> : <form onSubmit={confirm}>
       <div className="account-security-notice" role="status"><MailCheck size={18} /><span>Code sent to <strong>{challenge.destination}</strong>. Expires in 10 minutes; maximum five attempts.</span></div>
       <div className="form-group" style={{ marginTop: 16 }}><label htmlFor="bound-email-code">Verification code from new email</label><input id="bound-email-code" className={`form-control otp-verification-input ${otpStatus}`} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={otp} onChange={event => { const code = event.target.value.replace(/\D/g, ''); setOtp(code); setOtpStatus('idle'); setOtpMessage(''); if (code.length === 6) void verifyOtp(code) }} disabled={Boolean(busy) || otpStatus === 'valid'} aria-invalid={otpStatus === 'invalid'} required />{otpStatus === 'checking' && <p className="otp-verification-checking" role="status">Checking OTP…</p>}{otpMessage && <p className="otp-verification-message" role="alert">{otpMessage}</p>}</div>
       {otpStatus === 'valid' && <div className="otp-verification-success" role="status">OTP verified. You can now confirm the email change.</div>}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
         <LoadingButton type="submit" className="btn btn-primary" disabled={otpStatus !== 'valid'} loading={busy === 'confirm'} loadingLabel="Updating email...">Confirm email change</LoadingButton>
-        <button type="button" className="btn btn-secondary" disabled={Boolean(busy)} onClick={() => { setChallenge(null); setOtp(''); setOtpStatus('idle'); setOtpMessage(''); setError('') }}>Change address / request another code</button>
+        <button type="button" className="btn btn-secondary" disabled={Boolean(busy)} onClick={() => { clearOtpSession(OTP_SESSION_KEY); setChallenge(null); setOtp(''); setOtpStatus('idle'); setOtpMessage(''); setError('') }}>Change address / request another code</button>
       </div>
     </form>}
   </section>
