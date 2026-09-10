@@ -21,6 +21,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { apiFetch } from "../services/api/client";
+import LandingChatbot from "../components/LandingChatbot";
+import FacebookIcon from "../components/FacebookIcon";
 
 function useScrollReveal(threshold = 0.15) {
   const ref = useRef(null);
@@ -825,6 +827,15 @@ export default function LandingPage() {
                     <span>Paz Street, Brgy. 7, Balayan, Batangas</span>
                   </div>
                 </div>
+                <div className="landing-contact-item">
+                  <div className="landing-contact-icon">
+                    <FacebookIcon size={20} title="Facebook" />
+                  </div>
+                  <div>
+                    <strong>Facebook</strong>
+                    <a href="https://web.facebook.com/profile.php?id=100089597336119" target="_blank" rel="noopener noreferrer">I and C Laundry Hub</a>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -956,6 +967,10 @@ export default function LandingPage() {
                 <MapPin size={18} />
                 <span>Paz Street, Brgy. 7, Balayan, Batangas</span>
               </div>
+              <a className="landing-footer-contact-item" href="https://web.facebook.com/profile.php?id=100089597336119" target="_blank" rel="noopener noreferrer">
+                <FacebookIcon size={18} title="Facebook" />
+                <span>Facebook: I and C Laundry Hub</span>
+              </a>
             </div>
           </div>
         </div>
@@ -968,6 +983,7 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+      <LandingChatbot settings={settings} />
       {/* 🔝 Back to Top Button */}
       {showTopBtn && (
         <button className="back-to-top" onClick={scrollToTop}>
