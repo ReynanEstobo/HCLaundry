@@ -8,6 +8,7 @@
 
 const SECRET_PROPERTY = 'EMAIL_RELAY_SECRET';
 const SENDER_NAME = 'I&C Laundry';
+const DEFAULT_REPLY_TO = 'iclaundryshop@gmail.com';
 const MAX_RECIPIENT_LENGTH = 254;
 const MAX_SUBJECT_LENGTH = 200;
 const MAX_BODY_LENGTH = 20000;
@@ -25,8 +26,10 @@ function doPost(event) {
     const subject = String(payload.subject || '').trim();
     const body = String(payload.body || '').trim();
     const html = String(payload.html || '').trim();
+    const replyTo = String(payload.replyTo || '').trim();
 
     if (!isValidEmail(to) || !subject || !body ||
+        (replyTo && !isValidEmail(replyTo)) ||
         to.length > MAX_RECIPIENT_LENGTH || subject.length > MAX_SUBJECT_LENGTH ||
         body.length > MAX_BODY_LENGTH || html.length > MAX_BODY_LENGTH * 3) {
       return response({ success: false, error: 'Invalid message' });
@@ -35,7 +38,9 @@ function doPost(event) {
     GmailApp.sendEmail(to, subject, body, {
       htmlBody: html || undefined,
       name: SENDER_NAME,
-      replyTo: 'iclaundryshop@gmail.com',
+      // Public contact-form emails provide the visitor's address here. Staff
+      // can reply directly while Gmail still sends from the business account.
+      replyTo: replyTo || DEFAULT_REPLY_TO,
     });
     return response({ success: true });
   } catch (error) {

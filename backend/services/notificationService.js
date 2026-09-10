@@ -62,11 +62,11 @@ function brandedEmailHtml(subject, body) {
 </html>`
 }
 
-async function sendViaAppsScript({ relayUrl, relaySecret, to, subject, body, html }) {
+async function sendViaAppsScript({ relayUrl, relaySecret, to, subject, body, html, replyTo }) {
   const response = await fetch(relayUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ secret: relaySecret, to, subject, body, html }),
+    body: JSON.stringify({ secret: relaySecret, to, subject, body, html, replyTo }),
   })
   let data = null
   try { data = await response.json() } catch { /* The status check below handles non-JSON responses. */ }
@@ -75,8 +75,12 @@ async function sendViaAppsScript({ relayUrl, relaySecret, to, subject, body, htm
   }
 }
 
-export async function sendEmail({ to, subject, body }) {
+export async function sendEmail({ to, subject, body, replyTo }) {
   if (!to || !subject || !body) throw Object.assign(new Error('Missing required fields'), { status: 400 })
+  const normalizedReplyTo = replyTo ? String(replyTo).trim() : null
+  if (normalizedReplyTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedReplyTo)) {
+    throw Object.assign(new Error('Reply-to email is invalid'), { status: 400 })
+  }
   const text = `${String(body).trim()}\n\nVisit I&C Laundry: ${WEBSITE_URL}\n\n---\nThis is an automated email from I&C Laundry. Please do not reply to this message.`
   const html = brandedEmailHtml(subject, body)
   const relayUrl = runtimeValue('GOOGLE_APPS_SCRIPT_EMAIL_URL')
@@ -89,7 +93,7 @@ export async function sendEmail({ to, subject, body }) {
     await sendViaAppsScript({
       relayUrl: requireValue(relayUrl, 'Google Apps Script relay URL'),
       relaySecret: requireValue(relaySecret, 'Google Apps Script relay secret'),
-      to, subject, body: text, html,
+      to, subject, body: text, html, replyTo: normalizedReplyTo,
     })
     return { success: true, message: 'Email sent successfully' }
   }
@@ -104,7 +108,7 @@ export async function sendEmail({ to, subject, body }) {
     secure: true,
     auth: { user: from, pass },
   })
-  await transporter.sendMail({ from: `"I&C Laundry" <${from}>`, to, subject, text, html })
+  await transporter.sendMail({ from: `"I&C Laundry" <${from}>`, to, subject, text, html, replyTo: normalizedReplyTo || undefined })
   return { success: true, message: 'Email sent successfully' }
 }
 
