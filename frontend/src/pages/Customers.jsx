@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { Edit2, Phone, Plus, Search, Trash2, X } from "lucide-react";
+import { Edit2, Gift, Phone, Plus, Search, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
@@ -25,6 +25,7 @@ export default function Customers() {
   const [loadError, setLoadError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [customerToDelete, setCustomerToDelete] = useState(null);
+  const [rewardCustomer, setRewardCustomer] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -167,6 +168,14 @@ export default function Customers() {
     );
   });
 
+  const rewardLabel = (reward) => {
+    if (!reward) return "No issued reward";
+    const benefit = reward.reward_type === "free_load"
+      ? `Free ${Number(reward.free_load_kg || 8)} kg load`
+      : `${reward.discount_percent}% off`;
+    return `${benefit} · ${reward.status}`;
+  };
+
   if (loading) return <PageLoader label="Loading clients…" />;
   if (loadError) return <PageError message={loadError} onRetry={loadCustomers} />;
 
@@ -204,6 +213,7 @@ export default function Customers() {
                 <th>Phone</th>
                 <th>Email</th>
                 {isAdmin && <th>Branch</th>}
+                <th>Issued rewards</th>
                 <th>Added</th>
                 <th>Actions</th>
               </tr>
@@ -211,7 +221,7 @@ export default function Customers() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 6 : 5} className="empty-state">
+                  <td colSpan={isAdmin ? 7 : 6} className="empty-state">
                     <p>No customers found</p>
                   </td>
                 </tr>
@@ -236,6 +246,20 @@ export default function Customers() {
                     </td>
                     <td>{c.email || "—"}</td>
                     {isAdmin && <td>{c.branch || "Unassigned"}</td>}
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={() => setRewardCustomer(c)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: 210 }}
+                        title="View this client's issued loyalty rewards"
+                      >
+                        <Gift size={14} />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {rewardLabel(c.loyaltyRewards?.[0])}{c.loyaltyRewards?.length > 1 ? ` +${c.loyaltyRewards.length - 1}` : ""}
+                        </span>
+                      </button>
+                    </td>
                     <td style={{ fontSize: 13, color: "var(--text-muted)" }}>
                       {format(new Date(c.created_at), "MMM d, yyyy")}
                     </td>
@@ -436,6 +460,38 @@ export default function Customers() {
                 </LoadingButton>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {rewardCustomer && (
+        <div className="modal-overlay" onClick={() => setRewardCustomer(null)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 620 }}>
+            <div className="modal-header">
+              <div>
+                <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}><Gift size={20} /> Issued Rewards</h3>
+                <p style={{ margin: "4px 0 0", color: "var(--text-muted)", fontSize: 13 }}>{rewardCustomer.name} · {rewardCustomer.phone}</p>
+              </div>
+              <button className="btn-icon" onClick={() => setRewardCustomer(null)} aria-label="Close issued rewards"><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              {!rewardCustomer.loyaltyRewards?.length ? (
+                <p style={{ margin: 0, color: "var(--text-muted)" }}>No loyalty rewards have been issued to this client yet.</p>
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {rewardCustomer.loyaltyRewards.map((reward) => (
+                    <div key={reward.id} style={{ border: "1px solid var(--border-color)", borderRadius: 10, padding: 12, background: "var(--bg-secondary)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
+                        <strong>{reward.reward_type === "free_load" ? `Free ${Number(reward.free_load_kg || 8)} kg load` : `${reward.discount_percent}% discount`}</strong>
+                        <span style={{ textTransform: "capitalize", fontSize: 12, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: reward.status === "redeemed" ? "#dcfce7" : reward.status === "available" ? "#dbeafe" : "#f1f5f9", color: reward.status === "redeemed" ? "#166534" : "#334155" }}>{reward.status}</span>
+                      </div>
+                      <p style={{ margin: "7px 0 0", color: "var(--text-muted)", fontSize: 13 }}>Issued {format(new Date(reward.earned_at), "MMM d, yyyy, h:mm a")}</p>
+                      {reward.status === "revoked" && reward.revoke_reason && <p style={{ margin: "6px 0 0", color: "var(--danger)", fontSize: 13 }}>Reason: {reward.revoke_reason}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer"><button className="btn btn-secondary" onClick={() => setRewardCustomer(null)}>Close</button></div>
           </div>
         </div>
       )}

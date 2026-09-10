@@ -1,5 +1,26 @@
 import { database } from '../config/supabase.js'
 
+async function attachIssuedRewards(customers) {
+  const customerIds = customers.map(customer => customer?.id).filter(Boolean)
+  if (!customerIds.length) return customers
+  const { data: rewards, error } = await database
+    .from('loyalty_rewards')
+    .select('id, customer_id, reward_type, status, discount_percent, free_load_kg, earned_at, expires_at, redeemed_at, revoked_at, revoke_reason')
+    .in('customer_id', customerIds)
+    .order('earned_at', { ascending: false })
+  // Keep the Client directory available when opening an environment that has
+  // not yet run the loyalty migration.
+  if (error?.code === '42P01') return customers.map(customer => ({ ...customer, loyaltyRewards: [] }))
+  if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
+  const byCustomer = new Map()
+  for (const reward of rewards || []) {
+    const list = byCustomer.get(reward.customer_id) || []
+    list.push(reward)
+    byCustomer.set(reward.customer_id, list)
+  }
+  return customers.map(customer => ({ ...customer, loyaltyRewards: byCustomer.get(customer.id) || [] }))
+}
+
 async function resolveBranch(identity, requestedBranch) {
   if (!identity.staffId) throw Object.assign(new Error('Your account must have a staff profile before managing clients.'), { status: 403 })
   if (identity.role === 'staff') {
@@ -16,7 +37,7 @@ export async function listVisibleCustomers(identity) {
   if (identity.role === 'admin') {
     const { data, error } = await database.from('customers').select('*').is('deleted_at', null).order('created_at', { ascending: false })
     if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
-    return { data: data || [] }
+    return { data: await attachIssuedRewards(data || []) }
   }
   if (identity.role !== 'staff' || !identity.branchId) {
     throw Object.assign(new Error('Your staff account must be assigned to a branch before viewing clients.'), { status: 403 })
@@ -28,7 +49,8 @@ export async function listVisibleCustomers(identity) {
     .eq('branch_id', identity.branchId)
     .order('last_served_at', { ascending: false })
   if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
-  return { data: (data || []).map(row => row.customers).filter(customer => customer && !customer.deleted_at) }
+  const customers = (data || []).map(row => row.customers).filter(customer => customer && !customer.deleted_at)
+  return { data: await attachIssuedRewards(customers) }
 }
 
 export async function lookupCustomer(phone, identity) {

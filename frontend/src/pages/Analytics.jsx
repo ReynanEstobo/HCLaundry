@@ -12,6 +12,7 @@ import {
   Users,
   Timer,
   Wallet,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -722,6 +723,8 @@ Rules:
     ? `${customRange.start} to ${customRange.end}`
     : `${range.charAt(0).toUpperCase()}${range.slice(1)} view`;
   const peso = (value) => `₱${(Number(value) || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const hasCustomRange = Boolean(customRange.start || customRange.end);
+  const clearCustomRange = () => setCustomRange({ start: null, end: null });
   const csvCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
   const html = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 
@@ -804,15 +807,19 @@ Rules:
             display: "flex",
             gap: 10,
             alignItems: "center",
+            flexWrap: "wrap",
             background: "#fff",
             padding: "10px 14px",
             borderRadius: 12,
             border: "1px solid #e5e7eb",
+            width: "min(100%, 430px)",
           }}
         >
           <input
             type="date"
             value={customRange.start || ""}
+            aria-label="Start date"
+            style={{ flex: "1 1 135px", minWidth: 0 }}
             onChange={(e) =>
               setCustomRange((prev) => ({
                 ...prev,
@@ -826,6 +833,8 @@ Rules:
           <input
             type="date"
             value={customRange.end || ""}
+            aria-label="End date"
+            style={{ flex: "1 1 135px", minWidth: 0 }}
             onChange={(e) =>
               setCustomRange((prev) => ({
                 ...prev,
@@ -833,6 +842,18 @@ Rules:
               }))
             }
           />
+          {hasCustomRange && (
+            <button
+              type="button"
+              onClick={clearCustomRange}
+              className="btn-icon"
+              aria-label="Clear date range"
+              title="Clear date range"
+              style={{ flex: "0 0 auto", color: "var(--text-secondary)" }}
+            >
+              <X size={17} />
+            </button>
+          )}
         </div>
 
         {/* BRANCH FILTER */}

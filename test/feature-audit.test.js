@@ -118,7 +118,7 @@ test('staff client directory excludes deleted associations and other branches', 
     {branch_id:'branch-b',customers:{id:'other-client',deleted_at:null}},
     {branch_id:'branch-a',customers:null},
   ])
-  assert.deepEqual((await listVisibleCustomers(staff)).data,[active])
+  assert.deepEqual((await listVisibleCustomers(staff)).data,[{ ...active, loyaltyRewards: [] }])
 })
 
 test('admin may still archive another account and its audit is written', async t => {
