@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { MessageCircle, Send, X, ArrowUpRight, Tag, MapPin, Mail, Clock, Search, Shirt, Truck, Wallet } from 'lucide-react';
+import { MessageCircle, Send, X, ArrowUpRight, Tag, MapPin, Mail, Clock, Search, Truck, Wallet } from 'lucide-react';
 import './LandingChatbot.css';
 import FacebookIcon from './FacebookIcon';
 
-const topics = ['Prices per load', 'Shop location', 'Contact management', 'Opening hours', 'Track my order', 'Services', 'Pickup / delivery', 'Payment'];
-const topicIcons = [Tag, MapPin, Mail, Clock, Search, Shirt, Truck, Wallet];
+const topics = ['Prices per load', 'Shop location', 'Contact management', 'Opening hours', 'Track my order', 'Pickup / delivery', 'Payment'];
+const topicIcons = [Tag, MapPin, Mail, Clock, Search, Truck, Wallet];
 const contact = 'Call 0967-281-3602, email iclaundryshop@gmail.com, or message I and C Laundry Hub on Facebook. You can also use the Contact Us form below.';
 const price = value => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value));
 const valid = value => value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0;
@@ -24,11 +24,10 @@ export function answerQuestion(question, settings = {}) {
   if (/track|status|ready|when|long|tapos|claim|receipt/.test(q)) return { text: 'Use Track Your Laundry below and enter the complete tracking number from your receipt. You can see the order stage and estimated ready time there. Estimates may change as work progresses; please wait for Ready for pick-up before collecting.', section: 'track' };
   if (/delivery|deliver|pickup|pick.up|collect/.test(q)) return { text: 'Please contact management to confirm whether pickup or delivery is available in your area and any charges. For collection at the shop, check that your order is ready and bring your receipt or tracking number.', section: 'contact' };
   if (/payment|pay|cash|gcash|card|bayad|deposit/.test(q)) return { text: 'Orders require at least 50% payment of the final total when placed. Please ask staff about accepted payment methods and settle the remaining balance before release.', section: 'contact' };
-  if (/service|wash|dry|fold|laba|blanket|comforter/.test(q)) return { text: 'We offer washing, drying, and folding. Ask staff about special fabrics, bulky items, stain treatment, and any additional charges before drop-off.', section: 'process' };
   if (/loyalty|reward|discount|promo|free/.test(q)) return { text: 'Loyalty benefits depend on your qualifying transaction history and the current program settings. Staff can check your eligibility and confirm any discount before you pay.', section: 'contact' };
   if (/^(hi|hello|hey|good morning|good afternoon|good evening|salamat|thanks)[! .]*$/.test(q)) return { text: 'Hello! I can help with prices, directions, contact details, services, and order tracking. Choose a topic below or type your question.' };
   return {
-    text: 'Sorry, I do not have a confirmed answer for that yet, so I do not want to give you incorrect information. Please try asking about prices, location, services, payment, order tracking, or contact details. For anything else, our team can help through the Contact Us form or I and C Laundry Hub on Facebook.',
+    text: 'Sorry, I do not have a confirmed answer for that yet, so I do not want to give you incorrect information. Please try asking about prices, location, payment, order tracking, or contact details. For anything else, our team can help through the Contact Us form or I and C Laundry Hub on Facebook.',
     section: 'contact',
     facebook: true,
   };
