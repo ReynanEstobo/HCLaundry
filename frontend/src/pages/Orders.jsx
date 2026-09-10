@@ -889,8 +889,10 @@ export default function Orders() {
           {STATUS_FILTERS.map((s) => (
             <button
               key={s}
+              type="button"
               className={`garment-filter-btn ${filter === s ? "active" : ""}`}
               onClick={() => setFilter(s)}
+              aria-pressed={filter === s}
             >
               {s !== "all" && (
                 <span className="garment-filter-icon">{STATUS_ICONS[s]}</span>
@@ -904,27 +906,34 @@ export default function Orders() {
             <Search />
             <input
               placeholder="Search orders..."
+              aria-label="Search by order number or customer name"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
             />
           </div>
           <div className="view-toggle">
             <button
+              type="button"
               className={`view-toggle-btn ${viewMode === "table" ? "active" : ""}`}
               onClick={() => toggleView("table")}
               title="Table view"
+              aria-label="Use table view"
+              aria-pressed={viewMode === "table"}
             >
               <List size={16} />
             </button>
             <button
+              type="button"
               className={`view-toggle-btn ${viewMode === "board" ? "active" : ""}`}
               onClick={() => toggleView("board")}
               title="Board view"
+              aria-label="Use board view"
+              aria-pressed={viewMode === "board"}
             >
               <LayoutGrid size={16} />
             </button>
           </div>
-          <button className="btn btn-primary" onClick={openNew}>
+          <button type="button" className="btn btn-primary" onClick={openNew}>
             <Plus size={18} /> New Order
           </button>
         </div>
@@ -1051,18 +1060,18 @@ export default function Orders() {
       {viewMode === "table" && (
         <div className="card" style={{ padding: 0 }}>
           <div className={`table-wrapper orders-table-wrapper ${tableLoading ? "is-refreshing" : ""}`}>
-            <table>
+            <table className="orders-table">
               <thead>
                 <tr>
                   <th>Order #</th>
                   <th>Customer</th>
-                  {isAdmin && <th>Branch</th>}
-                  <th>Weight</th>
+                  {isAdmin && <th className="orders-column-branch">Branch</th>}
+                  <th className="orders-column-weight">Weight</th>
                   <th>Status</th>
-                  <th>Estimated Ready</th>
-                  <th>Payment</th>
+                  <th className="orders-column-eta">Estimated Ready</th>
+                  <th className="orders-column-payment">Payment</th>
                   <th>Amount</th>
-                  <th>Date</th>
+                  <th className="orders-column-date">Date</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -1070,12 +1079,17 @@ export default function Orders() {
                 {filtered.length === 0 ? (
                   <tr>
                     <td colSpan={isAdmin ? 10 : 9} className="empty-state">
-                      <p>No orders found</p>
+                      <p>{searchInput || filter !== "all" ? "No orders match the current search or status filter." : "No orders have been created yet."}</p>
+                      {(searchInput || filter !== "all") && (
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setSearchInput(""); setFilter("all"); }}>
+                          Clear filters
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ) : (
                   filtered.map((order) => (
-                    <tr key={order.id}>
+                    <tr key={order.id} className="orders-table-row">
                       <td
                         style={{
                           fontWeight: 600,
@@ -1086,11 +1100,11 @@ export default function Orders() {
                       </td>
                       <td>{order.customers?.name || "Walk-in"}</td>
                       {isAdmin && (
-                        <td style={{ fontSize: 13 }}>
+                        <td className="orders-column-branch" style={{ fontSize: 13 }}>
                           {order.branch || "Unassigned"}
                         </td>
                       )}
-                      <td>{order.weight_kg} kg</td>
+                      <td className="orders-column-weight">{order.weight_kg} kg</td>
                       <td>
                         <div className="status-track">
                           <div className="status-dots">
@@ -1142,7 +1156,7 @@ export default function Orders() {
                           </div>
                         </div>
                       </td>
-                      <td className="order-eta-cell">
+                      <td className="order-eta-cell orders-column-eta">
                         {['released', 'cancelled'].includes(order.status) ? (
                           <span className="order-eta-unavailable">—</span>
                         ) : (
@@ -1160,7 +1174,7 @@ export default function Orders() {
                           </div>
                         )}
                       </td>
-                      <td>
+                      <td className="orders-column-payment">
                         <span className={`badge badge-${order.payment_status}`}>
                           {order.payment_status}
                         </span>
@@ -1180,11 +1194,11 @@ export default function Orders() {
                           },
                         )}
                       </td>
-                      <td style={{ color: "var(--text-muted)", fontSize: 13 }}>
+                      <td className="orders-column-date" style={{ color: "var(--text-muted)", fontSize: 13 }}>
                         {format(new Date(order.created_at), "MMM d, h:mm a")}
                       </td>
                       <td>
-                        <div style={{ display: "flex", gap: 4 }}>
+                        <div className="orders-row-actions">
                           {order.status !== "cancelled" && (
                             <button
                               className="btn-icon"

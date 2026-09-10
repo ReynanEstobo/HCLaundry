@@ -103,32 +103,12 @@ const CustomTooltip = ({ active, payload, label }) => {
 // ─── Sub-filter pill group ─────────────────────────────────────────────────────
 function SubFilter({ value, onChange, options }) {
   return (
-    <div
-      style={{
-        display: "inline-flex",
-        background: "#f3f4f6",
-        borderRadius: 10,
-        padding: 3,
-        gap: 2,
-      }}
-    >
+    <div className="analytics-period-filter">
       {options.map((opt) => (
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          style={{
-            padding: "5px 14px",
-            borderRadius: 7,
-            border: "none",
-            cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 600,
-            transition: "all 0.15s ease",
-            background: value === opt.value ? "#fff" : "transparent",
-            color: value === opt.value ? "#111827" : "#6b7280",
-            boxShadow:
-              value === opt.value ? "0 1px 4px rgba(0,0,0,0.10)" : "none",
-          }}
+          className={`analytics-period-option${value === opt.value ? " active" : ""}`}
         >
           {opt.label}
         </button>
@@ -821,47 +801,26 @@ Rules:
   return (
     <>
       {/* FILTERS */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-          marginBottom: 18,
-        }}
-      >
+      <div className="analytics-filter-toolbar">
         {/* DATE FILTER */}
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "center",
-            flexWrap: "wrap",
-            background: "#fff",
-            padding: "10px 14px",
-            borderRadius: 12,
-            border: "1px solid #e5e7eb",
-            width: "min(100%, 430px)",
-          }}
-        >
+        <div className="analytics-date-filter">
           <input
             type="date"
             value={customRange.start || ""}
             aria-label="Start date"
             aria-invalid={Boolean(filterError)}
-            style={{ flex: "1 1 135px", minWidth: 0 }}
+            className="analytics-date-input"
             onChange={(e) => updateCustomRange("start", e.target.value)}
           />
 
-          <span>→</span>
+          <span className="analytics-date-divider">→</span>
 
           <input
             type="date"
             value={customRange.end || ""}
             aria-label="End date"
             aria-invalid={Boolean(filterError)}
-            style={{ flex: "1 1 135px", minWidth: 0 }}
+            className="analytics-date-input"
             onChange={(e) => updateCustomRange("end", e.target.value)}
           />
           {hasCustomRange && (
@@ -880,7 +839,7 @@ Rules:
             <p
               role="alert"
               aria-live="polite"
-              style={{ width: "100%", margin: 0, color: "#b42318", fontSize: 12, lineHeight: 1.4 }}
+              className="analytics-filter-error"
             >
               {filterError}
             </p>
@@ -891,13 +850,7 @@ Rules:
         <select
           value={selectedBranch}
           onChange={(e) => setSelectedBranch(e.target.value)}
-          style={{
-            padding: "10px 14px",
-            borderRadius: 12,
-            border: "1px solid #e5e7eb",
-            background: "#fff",
-            fontWeight: 600,
-          }}
+          className="analytics-branch-filter"
         >
           <option value="all">All Branches</option>
           <option value="Main - Brgy 7">Main - Brgy 7</option>
@@ -917,7 +870,7 @@ Rules:
           ]}
         />
 
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="analytics-report-actions">
           <button type="button" onClick={downloadReportCsv} className="analytics-report-button">
             <Download size={16} /> Export CSV
           </button>
