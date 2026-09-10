@@ -108,3 +108,38 @@ export async function transitionOrder(body, identity) {
   if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
   return { data }
 }
+
+export async function settleAndReleaseOrder(body, identity) {
+  const orderId = String(body?.orderId || '').trim()
+  if (!orderId) throw Object.assign(new Error('An order is required.'), { status: 400 })
+  requireBranch(identity)
+  const { data: order, error: orderError } = await database.from('orders')
+    .select('id, branch_id, status, total_price, amount_paid, payment_status, payment_method')
+    .eq('id', orderId).maybeSingle()
+  if (orderError || !order) throw Object.assign(new Error('Order not found.'), { status: 404 })
+  if (identity.role !== 'admin' && order.branch_id !== identity.branchId) {
+    throw Object.assign(new Error('You can only collect payment for orders assigned to your branch.'), { status: 403 })
+  }
+  if (order.status !== 'ready') throw Object.assign(new Error('Only ready-for-pickup orders can be released.'), { status: 400 })
+  const total = Number(order.total_price)
+  const paid = Number(order.amount_paid || 0)
+  if (!Number.isFinite(total) || total < 0 || !Number.isFinite(paid) || paid < 0) {
+    throw Object.assign(new Error('This order has invalid payment data.'), { status: 400 })
+  }
+  if (paid < total) {
+    const { error: paymentError } = await database.from('orders').update({
+      amount_paid: total,
+      payment_status: 'paid',
+      last_updated_by_staff_id: identity.staffId,
+    }).eq('id', order.id).eq('status', 'ready')
+    if (paymentError) throw Object.assign(new Error(paymentError.message), { status: 400 })
+  }
+  const { data, error } = await database.rpc('transition_branch_order', {
+    p_order_id: order.id,
+    p_staff_id: identity.staffId,
+    p_new_status: 'released',
+    p_correction_reason: null,
+  })
+  if (error) throw Object.assign(new Error(error.message), { status: 400, details: error })
+  return { data }
+}

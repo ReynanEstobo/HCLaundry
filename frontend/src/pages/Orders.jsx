@@ -21,7 +21,7 @@ import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useRealtime } from "../lib/useRealtime";
 import { sendEmail, sendSms } from "../services/api/notificationApi";
-import { cancelBranchOrder, createBranchOrder, getVisibleCustomers, lookupCustomerByPhone, transitionBranchOrder } from "../services/api/operationsApi";
+import { cancelBranchOrder, createBranchOrder, getVisibleCustomers, lookupCustomerByPhone, settleAndReleaseBranchOrder, transitionBranchOrder } from "../services/api/operationsApi";
 import { useAuth } from "../context/AuthContext";
 import { PageError, PageLoader } from "../components/AsyncState";
 import LoadingButton from "../components/LoadingButton";
@@ -153,8 +153,6 @@ export default function Orders() {
   const [cancellationReason, setCancellationReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("cash");
   const [orders, setOrders] = useState([]);
   const [allOrders, setAllOrders] = useState([]);
   const [page, setPage] = useState(0);
@@ -514,9 +512,11 @@ export default function Orders() {
       total_price,
       addons: form.addons, // ✅ now supported
       notes: form.notes,
-      payment_method: form.payment_method,
-      payment_status,
-      amount_paid: amountPaid,
+      ...(!editing && {
+        payment_method: form.payment_method,
+        payment_status,
+        amount_paid: amountPaid,
+      }),
       ...(isAdmin && { branch: form.branch }),
 
       ...(!editing && { status: "received" }),
@@ -682,7 +682,7 @@ export default function Orders() {
           ? total
           : 0);
 
-    const pay = Number(paymentAmount) || 0;
+    const pay = Math.max(0, total - paid);
 
     if (pay <= 0) return toast.error("Enter valid amount");
 
@@ -694,17 +694,7 @@ export default function Orders() {
 
     setUpdatingOrderId(selectedOrder.id);
     try {
-      const { error } = await supabase
-        .from("orders")
-        .update({
-          amount_paid: newTotalPaid,
-          payment_status: "paid",
-          payment_method: paymentMethod,
-        })
-        .eq("id", selectedOrder.id);
-
-      if (error) throw error;
-      await transitionBranchOrder(selectedOrder.id, "released");
+      await settleAndReleaseBranchOrder(selectedOrder.id);
     } catch (transitionError) {
       toast.error(transitionError.message || "Unable to release the order");
       setUpdatingOrderId(null);
@@ -737,8 +727,6 @@ export default function Orders() {
 
       if (remaining > 0) {
         setSelectedOrder(order);
-        setPaymentAmount(remaining); // ✅ exact remaining
-        setPaymentMethod("cash");
         setShowPaymentModal(true);
         return;
       }
@@ -1739,13 +1727,15 @@ export default function Orders() {
                       Min. 50% required
                     </span>
                   </div>
+                  {editing && <p style={{ margin: "0 0 12px", color: "var(--text-muted)", fontSize: 13 }}>Payment details are locked after placement. The remaining balance is collected only when the order is released.</p>}
                   <div className="form-row">
                     <div className="form-group">
                       <label>Method</label>
                       <select
                         className="form-control"
-                        value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        value={form.payment_method}
+                        onChange={(e) => setForm((f) => ({ ...f, payment_method: e.target.value }))}
+                        disabled={Boolean(editing)}
                       >
                         <option value="cash">Cash</option>
                       </select>
@@ -1759,6 +1749,7 @@ export default function Orders() {
                         min="0"
                         placeholder="0.00"
                         value={form.amount_paid}
+                        disabled={Boolean(editing)}
                         onChange={(e) =>
                           setForm((f) => ({
                             ...f,
@@ -1865,29 +1856,11 @@ export default function Orders() {
             <div className="order-modal-body">
               <div className="form-group">
                 <label>Remaining Amount</label>
-                <input
-                  className="form-control"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  type="number"
-                />
+                <div className="form-control" style={{ display: "flex", alignItems: "center", fontWeight: 700, background: "var(--bg-secondary)" }}>
+                  ₱{Math.max(0, Number(selectedOrder?.total_price || 0) - Number(selectedOrder?.amount_paid || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
-
-              <div className="form-group">
-                <label>Payment Method</label>
-                <select
-                  className="form-control"
-                  value={form.payment_method}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      payment_method: e.target.value,
-                    }))
-                  }
-                >
-                  <option value="cash">Cash</option>
-                </select>
-              </div>
+              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>The payment recorded when this order was placed cannot be edited. Confirming will collect this exact remaining balance and release the order.</p>
             </div>
 
             <div className="order-modal-footer">

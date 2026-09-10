@@ -148,6 +148,12 @@ export async function execute(table, request, identity) {
   if (table === 'orders' && request.operation === 'update' && Object.hasOwn(request.payload || {}, 'status')) {
     throw Object.assign(new Error('Order stages can only be changed through the secure workflow.'), { status: 403 })
   }
+  if (table === 'orders' && request.operation === 'update') {
+    const protectedPaymentFields = ['amount_paid', 'payment_status', 'payment_method', 'loyalty_reward_id', 'loyalty_original_total', 'loyalty_discount_amount']
+    if (protectedPaymentFields.some(field => Object.hasOwn(request.payload || {}, field))) {
+      throw Object.assign(new Error('Payment details cannot be edited after an order is placed. Use the secure payment-and-release workflow.'), { status: 403 })
+    }
+  }
   if (BRANCH_SCOPED_TABLES.has(table)) {
     request = identity.role === 'admin'
       ? await attachAdminBranch(table, request, identity)

@@ -173,6 +173,8 @@ export default function Analytics() {
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [hasLoadedAnalytics, setHasLoadedAnalytics] = useState(false);
+  const [filterError, setFilterError] = useState("");
 
   const [stats, setStats] = useState({});
   const [operationalSummary, setOperationalSummary] = useState({
@@ -190,8 +192,24 @@ export default function Analytics() {
   const [manualAiRefresh, setManualAiRefresh] = useState(false);
 
   useEffect(() => {
-    loadAnalytics();
-  }, [range, customRange, selectedBranch]);
+    const hasStartDate = Boolean(customRange.start);
+    const hasEndDate = Boolean(customRange.end);
+
+    // Do not replace the existing report while a customer is still choosing a
+    // date range. Only fetch after both dates form a valid range.
+    if (hasStartDate !== hasEndDate) {
+      setFilterError("Choose both a start date and an end date to apply the date filter.");
+      return;
+    }
+
+    if (hasStartDate && customRange.start > customRange.end) {
+      setFilterError("The start date must be on or before the end date.");
+      return;
+    }
+
+    setFilterError("");
+    loadAnalytics(hasLoadedAnalytics);
+  }, [range, customRange.start, customRange.end, selectedBranch]);
 
   useRealtime(["orders", "expenses"], () => {
     loadAnalytics(true);
@@ -205,7 +223,8 @@ export default function Analytics() {
   }, [forecastData, selectedBranch, range, operationalSummary, manualAiRefresh]);
 
   async function loadAnalytics(background = false) {
-    if (!background) {
+    const keepCurrentReport = background || hasLoadedAnalytics;
+    if (!keepCurrentReport) {
       setLoading(true);
       setLoadError("");
       setForecastAiMeta({ source: "pending", savedAt: null, isCached: false });
@@ -317,12 +336,17 @@ export default function Analytics() {
     });
 
     generateForecast(orderData);
+    setHasLoadedAnalytics(true);
 
     } catch (error) {
-      if (!background) setLoadError(error.message || "Unable to load analytics data.");
-      else console.error("Background analytics refresh failed:", error);
+      if (!keepCurrentReport) {
+        setLoadError(error.message || "Unable to load analytics data.");
+      } else {
+        console.error("Analytics refresh failed:", error);
+        setFilterError("Unable to refresh the report. Your previous results are still shown.");
+      }
     } finally {
-      if (!background) setLoading(false);
+      if (!keepCurrentReport) setLoading(false);
     }
   }
 
@@ -724,7 +748,13 @@ Rules:
     : `${range.charAt(0).toUpperCase()}${range.slice(1)} view`;
   const peso = (value) => `₱${(Number(value) || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const hasCustomRange = Boolean(customRange.start || customRange.end);
-  const clearCustomRange = () => setCustomRange({ start: null, end: null });
+  const updateCustomRange = (field, value) => {
+    setCustomRange((previous) => ({ ...previous, [field]: value || null }));
+  };
+  const clearCustomRange = () => {
+    setFilterError("");
+    setCustomRange({ start: null, end: null });
+  };
   const csvCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
   const html = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 
@@ -786,7 +816,7 @@ Rules:
   }
 
   if (loading) return <PageLoader label="Preparing analytics…" />;
-  if (loadError) return <PageError message={loadError} onRetry={loadAnalytics} />;
+  if (loadError) return <PageError message={loadError} onRetry={() => loadAnalytics(false)} />;
 
   return (
     <>
@@ -819,13 +849,9 @@ Rules:
             type="date"
             value={customRange.start || ""}
             aria-label="Start date"
+            aria-invalid={Boolean(filterError)}
             style={{ flex: "1 1 135px", minWidth: 0 }}
-            onChange={(e) =>
-              setCustomRange((prev) => ({
-                ...prev,
-                start: e.target.value,
-              }))
-            }
+            onChange={(e) => updateCustomRange("start", e.target.value)}
           />
 
           <span>→</span>
@@ -834,13 +860,9 @@ Rules:
             type="date"
             value={customRange.end || ""}
             aria-label="End date"
+            aria-invalid={Boolean(filterError)}
             style={{ flex: "1 1 135px", minWidth: 0 }}
-            onChange={(e) =>
-              setCustomRange((prev) => ({
-                ...prev,
-                end: e.target.value,
-              }))
-            }
+            onChange={(e) => updateCustomRange("end", e.target.value)}
           />
           {hasCustomRange && (
             <button
@@ -853,6 +875,15 @@ Rules:
             >
               <X size={17} />
             </button>
+          )}
+          {filterError && (
+            <p
+              role="alert"
+              aria-live="polite"
+              style={{ width: "100%", margin: 0, color: "#b42318", fontSize: 12, lineHeight: 1.4 }}
+            >
+              {filterError}
+            </p>
           )}
         </div>
 
