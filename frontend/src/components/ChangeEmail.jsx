@@ -36,12 +36,12 @@ export default function ChangeEmail({ onChanged }) {
     finally { setBusy('') }
   }
 
-  async function verifyOtp() {
-    if (!challenge || !/^\d{6}$/.test(otp)) { setOtpStatus('invalid'); setOtpMessage('Enter the complete 6-digit code.'); return }
+  async function verifyOtp(code) {
+    if (!challenge || !/^\d{6}$/.test(code)) return
     setBusy('verify')
     setOtpStatus('checking'); setOtpMessage(''); setError('')
     try {
-      await apiFetch('/api/auth/email/otp/verify', { method: 'POST', body: JSON.stringify({ challengeId: challenge.challengeId, otp }) })
+      await apiFetch('/api/auth/email/otp/verify', { method: 'POST', body: JSON.stringify({ challengeId: challenge.challengeId, otp: code }) })
       setOtpStatus('valid')
     } catch (error) {
       setOtpStatus('invalid')
@@ -86,8 +86,7 @@ export default function ChangeEmail({ onChanged }) {
       <LoadingButton type="submit" className="btn btn-primary" loading={busy === 'send'} loadingLabel="Sending code...">Send code to new email</LoadingButton>
     </form> : <form onSubmit={confirm}>
       <div className="account-security-notice" role="status"><MailCheck size={18} /><span>Code sent to <strong>{challenge.destination}</strong>. Expires in 10 minutes; maximum five attempts.</span></div>
-      <div className="form-group" style={{ marginTop: 16 }}><label htmlFor="bound-email-code">Verification code from new email</label><input id="bound-email-code" className={`form-control otp-verification-input ${otpStatus}`} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={otp} onChange={event => { setOtp(event.target.value.replace(/\D/g, '')); setOtpStatus('idle'); setOtpMessage('') }} disabled={Boolean(busy) || otpStatus === 'valid'} aria-invalid={otpStatus === 'invalid'} required />{otpMessage && <p className="otp-verification-message" role="alert">{otpMessage}</p>}</div>
-      <LoadingButton type="button" className="btn btn-secondary" disabled={Boolean(busy) || otpStatus === 'valid'} onClick={verifyOtp} loading={busy === 'verify'} loadingLabel="Checking OTP...">{otpStatus === 'valid' ? 'OTP verified' : 'Verify OTP'}</LoadingButton>
+      <div className="form-group" style={{ marginTop: 16 }}><label htmlFor="bound-email-code">Verification code from new email</label><input id="bound-email-code" className={`form-control otp-verification-input ${otpStatus}`} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={otp} onChange={event => { const code = event.target.value.replace(/\D/g, ''); setOtp(code); setOtpStatus('idle'); setOtpMessage(''); if (code.length === 6) void verifyOtp(code) }} disabled={Boolean(busy) || otpStatus === 'valid'} aria-invalid={otpStatus === 'invalid'} required />{otpStatus === 'checking' && <p className="otp-verification-checking" role="status">Checking OTP…</p>}{otpMessage && <p className="otp-verification-message" role="alert">{otpMessage}</p>}</div>
       {otpStatus === 'valid' && <div className="otp-verification-success" role="status">OTP verified. You can now confirm the email change.</div>}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
         <LoadingButton type="submit" className="btn btn-primary" disabled={otpStatus !== 'valid'} loading={busy === 'confirm'} loadingLabel="Updating email...">Confirm email change</LoadingButton>

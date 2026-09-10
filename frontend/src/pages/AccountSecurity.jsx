@@ -49,11 +49,11 @@ export default function AccountSecurity() {
     }
   }
 
-  async function verifyCode() {
-    if (!/^\d{6}$/.test(otp)) { setOtpStatus('invalid'); setOtpMessage('Enter the complete 6-digit code.'); return }
+  async function verifyCode(code) {
+    if (!/^\d{6}$/.test(code)) return
     setOtpStatus('checking'); setOtpMessage('')
     try {
-      await apiFetch('/api/auth/password/otp/verify', { method: 'POST', body: JSON.stringify({ otp }) })
+      await apiFetch('/api/auth/password/otp/verify', { method: 'POST', body: JSON.stringify({ otp: code }) })
       setOtpStatus('valid')
     } catch (error) {
       setOtpStatus('invalid')
@@ -95,11 +95,11 @@ export default function AccountSecurity() {
           <label>Email verification code</label>
           <div className="login-input-wrap">
             <KeyRound size={15} className="login-input-icon" />
-            <input className={`login-input account-security-otp otp-verification-input ${otpStatus}`} inputMode="numeric" maxLength={6} value={otp} disabled={!destination || saving || otpStatus === 'valid'} onChange={event => { setOtp(event.target.value.replace(/\D/g, '')); setOtpStatus('idle'); setOtpMessage('') }} placeholder="000000" aria-invalid={otpStatus === 'invalid'} required />
+            <input className={`login-input account-security-otp otp-verification-input ${otpStatus}`} inputMode="numeric" maxLength={6} value={otp} disabled={!destination || saving || otpStatus === 'valid' || otpStatus === 'checking'} onChange={event => { const code = event.target.value.replace(/\D/g, ''); setOtp(code); setOtpStatus('idle'); setOtpMessage(''); if (code.length === 6) void verifyCode(code) }} placeholder="000000" aria-invalid={otpStatus === 'invalid'} required />
           </div>
+          {otpStatus === 'checking' && <p className="otp-verification-checking" role="status">Checking OTP…</p>}
           {otpMessage && <p className="otp-verification-message" role="alert">{otpMessage}</p>}
         </div>
-        {destination && <LoadingButton type="button" className="account-security-code-button" disabled={saving || otpStatus === 'valid'} onClick={verifyCode} loading={otpStatus === 'checking'} loadingLabel="Checking OTP…">{otpStatus === 'valid' ? 'OTP verified' : 'Verify OTP'}</LoadingButton>}
         {otpStatus === 'valid' && <div className="otp-verification-success" role="status">OTP verified. You can now set a new password.</div>}
         <PasswordField label="New password" value={newPassword} onChange={setNewPassword} visible={visible.next} onToggle={flip('next')} placeholder="At least 10 characters" disabled={saving || otpStatus !== 'valid'} />
         <PasswordField label="Confirm new password" value={confirmation} onChange={setConfirmation} visible={visible.confirmation} onToggle={flip('confirmation')} placeholder="Re-enter your new password" disabled={saving || otpStatus !== 'valid'} />

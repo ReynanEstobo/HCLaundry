@@ -60,17 +60,13 @@ export default function Settings() {
     }
   };
 
-  const verifyPasswordOtp = async () => {
-    if (!/^\d{6}$/.test(passwordOtp)) {
-      setPasswordOtpStatus("invalid");
-      setPasswordOtpMessage("Enter the complete 6-digit code.");
-      return;
-    }
+  const verifyPasswordOtp = async (code) => {
+    if (!/^\d{6}$/.test(code)) return;
     setPwLoading(true);
     setPasswordOtpStatus("checking");
     setPasswordOtpMessage("");
     try {
-      await apiFetch('/api/auth/password/otp/verify', { method: 'POST', body: JSON.stringify({ otp: passwordOtp }) });
+      await apiFetch('/api/auth/password/otp/verify', { method: 'POST', body: JSON.stringify({ otp: code }) });
       setPasswordOtpStatus("valid");
     } catch (error) {
       setPasswordOtpStatus("invalid");
@@ -327,11 +323,11 @@ export default function Settings() {
               <label>Email Verification Code</label>
               <div className="settings-input-wrapper">
                 <KeyRound size={16} className="settings-input-icon" />
-                <input className={`form-control otp-verification-input ${passwordOtpStatus}`} inputMode="numeric" maxLength={6} disabled={!otpDestination || pwLoading || passwordOtpStatus === "valid"} value={passwordOtp} onChange={(e) => { setPasswordOtp(e.target.value.replace(/\D/g, '')); setPasswordOtpStatus("idle"); setPasswordOtpMessage(""); }} placeholder="6-digit code" aria-invalid={passwordOtpStatus === "invalid"} required style={{ paddingLeft: 38, textAlign: 'center', letterSpacing: 5, fontWeight: 700 }} />
+                <input className={`form-control otp-verification-input ${passwordOtpStatus}`} inputMode="numeric" maxLength={6} disabled={!otpDestination || pwLoading || passwordOtpStatus === "valid" || passwordOtpStatus === "checking"} value={passwordOtp} onChange={(e) => { const code = e.target.value.replace(/\D/g, ''); setPasswordOtp(code); setPasswordOtpStatus("idle"); setPasswordOtpMessage(""); if (code.length === 6) void verifyPasswordOtp(code); }} placeholder="6-digit code" aria-invalid={passwordOtpStatus === "invalid"} required style={{ paddingLeft: 38, textAlign: 'center', letterSpacing: 5, fontWeight: 700 }} />
               </div>
+              {passwordOtpStatus === "checking" && <p className="otp-verification-checking" role="status">Checking OTP…</p>}
               {passwordOtpMessage && <p className="otp-verification-message" role="alert">{passwordOtpMessage}</p>}
             </div>
-            {otpDestination && <LoadingButton type="button" className="btn btn-secondary" disabled={pwLoading || passwordOtpStatus === "valid"} onClick={verifyPasswordOtp} loading={passwordOtpStatus === "checking"} loadingLabel="Checking OTP…" style={{ width: '100%', marginBottom: 14 }}>{passwordOtpStatus === "valid" ? 'OTP verified' : 'Verify OTP'}</LoadingButton>}
             {passwordOtpStatus === "valid" && <div className="otp-verification-success" role="status">OTP verified. You can now set a new password.</div>}
             <div className="form-row">
               <div className="form-group">
