@@ -23,7 +23,6 @@ import LoadingButton from "../components/LoadingButton";
 import ChangeEmail from "../components/ChangeEmail";
 import useOtpCooldown from "../hooks/useOtpCooldown";
 import { clearOtpSession, readOtpSession, writeOtpSession } from "../utils/otpSession";
-import { getLoyaltyRewards, revokeLoyaltyReward } from "../services/api/operationsApi";
 
 const PASSWORD_OTP_SESSION_KEY = "ic-laundry:settings-password-otp";
 const PASSWORD_OTP_COOLDOWN_KEY = "ic-laundry:settings-password-otp-cooldown";
@@ -108,18 +107,6 @@ export default function Settings() {
   const [loyaltyFreeLoadMilestone, setLoyaltyFreeLoadMilestone] = useState(10);
   const [loyaltyDiscountPercent, setLoyaltyDiscountPercent] = useState(50);
   const [loyaltyRewardExpiryDays, setLoyaltyRewardExpiryDays] = useState(180);
-  const [loyaltyRewards, setLoyaltyRewards] = useState([]);
-  const [revokingRewardId, setRevokingRewardId] = useState("");
-
-  const loadLoyaltyRewards = async () => {
-    try {
-      const result = await getLoyaltyRewards();
-      setLoyaltyRewards(result.data || []);
-    } catch {
-      // Settings still works before the loyalty migration has been applied.
-      setLoyaltyRewards([]);
-    }
-  };
 
   useEffect(() => {
     async function loadSettings() {
@@ -154,7 +141,6 @@ export default function Settings() {
     }
 
     loadSettings();
-    loadLoyaltyRewards();
   }, []);
   useEffect(() => {
     const channel = supabase
@@ -276,21 +262,6 @@ export default function Settings() {
   const handleDarkModeToggle = () => {
     const next = !darkMode;
     setDarkMode(next);
-  };
-
-  const handleRevokeReward = async (reward) => {
-    const reason = window.prompt(`Why revoke this ${reward.reward_type === "free_load" ? "free-load" : "discount"} reward?`);
-    if (!reason?.trim()) return;
-    setRevokingRewardId(reward.id);
-    try {
-      await revokeLoyaltyReward(reward.id, reason.trim());
-      toast.success("Loyalty reward revoked and recorded.");
-      await loadLoyaltyRewards();
-    } catch (error) {
-      toast.error(error.message || "Could not revoke this reward.");
-    } finally {
-      setRevokingRewardId("");
-    }
   };
 
   const handleNotificationsToggle = () => {
@@ -685,23 +656,6 @@ export default function Settings() {
           <LoadingButton className="btn btn-primary" loading={settingsSaving} loadingLabel="Saving…" onClick={handleSaveBusinessSettings} style={{ marginTop: 12 }}>
             <Save size={15} /> Save Loyalty Program
           </LoadingButton>
-          <div className="settings-divider" />
-          <h4 className="settings-subtitle">Issued rewards</h4>
-          {loyaltyRewards.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: 13 }}>No loyalty rewards have been issued yet.</p>
-          ) : (
-            <div style={{ display: "grid", gap: 8, maxHeight: 280, overflow: "auto" }}>
-              {loyaltyRewards.map((reward) => (
-                <div key={reward.id} style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", padding: 10, border: "1px solid var(--border-color)", borderRadius: 8 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <strong style={{ display: "block", fontSize: 13 }}>{reward.customers?.name || "Customer"} · {reward.reward_type === "free_load" ? "Free 8 kg load" : `${reward.discount_percent}% off`}</strong>
-                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>Status: {reward.status} · Expires {new Date(reward.expires_at).toLocaleDateString("en-PH")}</span>
-                  </div>
-                  {reward.status === "available" && <LoadingButton className="btn btn-sm btn-secondary" loading={revokingRewardId === reward.id} loadingLabel="Revoking…" onClick={() => handleRevokeReward(reward)}>Revoke</LoadingButton>}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
       {passwordChanged && <div className="modal-overlay account-security-success-overlay" role="presentation">
