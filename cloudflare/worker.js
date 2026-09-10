@@ -3,14 +3,14 @@ import { handleData } from '../backend/controllers/dataController.js'
 import { cancelOrder, createOrder, restockInventory, transitionOrder } from '../backend/controllers/operationController.js'
 import { listVisibleCustomers, lookupCustomer, registerCustomer } from '../backend/controllers/customerController.js'
 import { listRecycleBin, restoreRecord } from '../backend/controllers/auditController.js'
-import { login, signUp, getMe, requestForgotPasswordOtp, requestPasswordOtp, resetForgottenPassword, updatePassword } from '../backend/controllers/authController.js'
+import { login, signUp, getMe, requestForgotPasswordOtp, requestPasswordOtp, resetForgottenPassword, updatePassword, verifyForgotPasswordOtp, verifyPasswordChangeOtp } from '../backend/controllers/authController.js'
 import { provisionStaff, resetStaffCredentials, updateProvisionedStaff } from '../backend/controllers/staffProvisionController.js'
 import { getPublicSettings, sendContactMessage, trackOrder } from '../backend/controllers/publicController.js'
 import { sendEmail, sendSms } from '../backend/services/notificationService.js'
 import { askGemini, generateForecast, generateDecisionSupport } from '../backend/services/aiService.js'
 import { resourceRoutes } from '../backend/routes/resourceRoutes.js'
 import { configureRuntimeEnv } from '../backend/config/supabase.js'
-import { requestEmailChange, confirmEmailChange } from '../backend/controllers/emailChangeController.js'
+import { requestEmailChange, confirmEmailChange, verifyEmailChangeOtp } from '../backend/controllers/emailChangeController.js'
 import { listLoyaltyRewards, revokeLoyaltyReward } from '../backend/controllers/loyaltyController.js'
 
 const SECURITY_HEADERS = {
@@ -53,9 +53,12 @@ async function body(request) {
 const ratePolicies = {
   'POST:auth/login': { limit: 10, windowMs: 15 * 60 * 1000 },
   'POST:auth/forgot-password/otp': { limit: 5, windowMs: 15 * 60 * 1000 },
+  'POST:auth/forgot-password/otp/verify': { limit: 10, windowMs: 15 * 60 * 1000 },
   'PATCH:auth/forgot-password': { limit: 8, windowMs: 15 * 60 * 1000 },
   'POST:auth/password/otp': { limit: 5, windowMs: 15 * 60 * 1000 },
+  'POST:auth/password/otp/verify': { limit: 10, windowMs: 15 * 60 * 1000 },
   'POST:auth/email/otp': { limit: 5, windowMs: 15 * 60 * 1000 },
+  'POST:auth/email/otp/verify': { limit: 10, windowMs: 15 * 60 * 1000 },
   'PATCH:auth/email': { limit: 10, windowMs: 15 * 60 * 1000 },
   'POST:public/contact': { limit: 3, windowMs: 15 * 60 * 1000 },
   'GET:public/orders/track': { limit: 30, windowMs: 60 * 1000 },
@@ -106,12 +109,15 @@ async function api(request, env) {
 
   if (method === 'POST' && path === 'auth/login') return json(await login(await body(request)))
   if (method === 'POST' && path === 'auth/forgot-password/otp') return json(await requestForgotPasswordOtp(await body(request)))
+  if (method === 'POST' && path === 'auth/forgot-password/otp/verify') return json(await verifyForgotPasswordOtp(await body(request)))
   if (method === 'PATCH' && path === 'auth/forgot-password') return json(await resetForgottenPassword(await body(request)))
   if (method === 'POST' && path === 'auth/signup') { requireAdmin(await authenticate(request)); return json(await signUp(await body(request))) }
   if (method === 'GET' && path === 'auth/me') return json(await getMe(await authenticate(request)))
   if (method === 'POST' && path === 'auth/email/otp') { const identity = await authenticate(request); return json(await requestEmailChange(await body(request), identity)) }
+  if (method === 'POST' && path === 'auth/email/otp/verify') { const identity = await authenticate(request); return json(await verifyEmailChangeOtp(await body(request), identity)) }
   if (method === 'PATCH' && path === 'auth/email') { const identity = await authenticate(request); return json(await confirmEmailChange(await body(request), identity)) }
   if (method === 'POST' && path === 'auth/password/otp') return json(await requestPasswordOtp(await body(request), await authenticate(request)))
+  if (method === 'POST' && path === 'auth/password/otp/verify') return json(await verifyPasswordChangeOtp(await body(request), await authenticate(request)))
   if (method === 'PATCH' && path === 'auth/password') return json(await updatePassword(await body(request), await authenticate(request)))
   if (method === 'POST' && path === 'staff/provision') { const identity = await authenticate(request); requireAdmin(identity); return json(await provisionStaff(await body(request), identity)) }
   if (method === 'POST' && path === 'staff/reset-credentials') { const identity = await authenticate(request); requireAdmin(identity); return json(await resetStaffCredentials(await body(request), identity)) }
@@ -155,6 +161,7 @@ export default {
         // but internal service errors must not disclose database or provider details.
         return json({
           error: status >= 500 ? 'Internal server error' : (error?.message || 'Request failed'),
+          code: status >= 500 ? undefined : error?.code,
         }, status)
       }
   },

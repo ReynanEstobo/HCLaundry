@@ -57,3 +57,16 @@ export async function confirmEmailChange({ challengeId, otp }, identity) {
   if (!data?.success) throw invalid(data?.error || 'Unable to verify this code.')
   return data
 }
+
+export async function verifyEmailChangeOtp({ challengeId, otp }, identity) {
+  requireAccount(identity)
+  if (typeof challengeId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(challengeId)
+    || typeof otp !== 'string' || !/^\d{6}$/.test(otp)) throw invalid('Enter the six-digit email verification code.')
+  const { data, error } = await database.rpc('verify_account_email_change', {
+    p_auth_user_id: identity.user.id, p_challenge_id: challengeId,
+    p_code_hash: hashCode(identity.user.id, challengeId, otp),
+  })
+  if (error) throw new Error('Unable to verify this code')
+  if (!data?.success) throw invalid(data?.error || 'Unable to verify this code.')
+  return data
+}

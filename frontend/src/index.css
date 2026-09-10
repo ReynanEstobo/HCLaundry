@@ -96,6 +96,44 @@ body {
   background: rgba(93, 143, 168, 0.55);
 }
 
+/* OTP status feedback used by password and account-email verification. */
+.otp-verification-input.valid {
+  border-color: #6fcf97 !important;
+  background: #f0fbf4 !important;
+  box-shadow: 0 0 0 3px rgba(55, 174, 105, 0.12);
+}
+.otp-verification-input.invalid {
+  border-color: #f09a9a !important;
+  background: #fff7f7 !important;
+  box-shadow: 0 0 0 3px rgba(220, 74, 74, 0.1);
+}
+.otp-verification-message {
+  margin: 6px 0 0;
+  color: #c43131;
+  font-size: 12px;
+  font-weight: 600;
+}
+.otp-verification-success {
+  margin: 0 0 14px;
+  padding: 9px 11px;
+  border: 1px solid #a6dfba;
+  border-radius: 8px;
+  background: #f0fbf4;
+  color: #207344;
+  font-size: 12px;
+  font-weight: 600;
+}
+.otp-email-missing {
+  margin: 0 0 14px;
+  padding: 10px 11px;
+  border: 1px solid #f0c87a;
+  border-radius: 8px;
+  background: #fff9ed;
+  color: #855b13;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 ::selection {
   background: var(--primary-100);
   color: var(--primary);

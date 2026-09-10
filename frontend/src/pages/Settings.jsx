@@ -33,18 +33,48 @@ export default function Settings() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [passwordOtp, setPasswordOtp] = useState("");
   const [otpDestination, setOtpDestination] = useState("");
+  const [recoveryEmailMissing, setRecoveryEmailMissing] = useState(false);
+  const [passwordOtpStatus, setPasswordOtpStatus] = useState("idle");
+  const [passwordOtpMessage, setPasswordOtpMessage] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
   const [passwordChanged, setPasswordChanged] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
 
   const requestPasswordOtp = async () => {
     setPwLoading(true);
+    setRecoveryEmailMissing(false);
     try {
       const result = await apiFetch('/api/auth/password/otp', { method: 'POST' });
       setOtpDestination(result.destination);
+      setPasswordOtp("");
+      setPasswordOtpStatus("idle");
+      setPasswordOtpMessage("");
+      setNewPassword("");
+      setConfirmPassword("");
       toast.success(`Verification code sent to ${result.destination}`);
     } catch (error) {
+      setRecoveryEmailMissing(error.data?.code === 'CONTACT_EMAIL_REQUIRED');
       toast.error(error.message);
+    } finally {
+      setPwLoading(false);
+    }
+  };
+
+  const verifyPasswordOtp = async () => {
+    if (!/^\d{6}$/.test(passwordOtp)) {
+      setPasswordOtpStatus("invalid");
+      setPasswordOtpMessage("Enter the complete 6-digit code.");
+      return;
+    }
+    setPwLoading(true);
+    setPasswordOtpStatus("checking");
+    setPasswordOtpMessage("");
+    try {
+      await apiFetch('/api/auth/password/otp/verify', { method: 'POST', body: JSON.stringify({ otp: passwordOtp }) });
+      setPasswordOtpStatus("valid");
+    } catch (error) {
+      setPasswordOtpStatus("invalid");
+      setPasswordOtpMessage(/invalid verification code/i.test(error.message) ? "OTP is wrong. Please try again." : error.message);
     } finally {
       setPwLoading(false);
     }
@@ -178,19 +208,19 @@ export default function Settings() {
       toast.error("Passwords do not match");
       return;
     }
-    if (!otpDestination || !/^\d{6}$/.test(passwordOtp)) {
-      toast.error("Send a verification code and enter its 6 digits");
+    if (passwordOtpStatus !== "valid") {
+      toast.error("Verify your OTP before setting a new password");
       return;
     }
 
     setPwLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword, otp: passwordOtp });
-      if (error) throw new Error(error.message);
+      await apiFetch('/api/auth/password', { method: 'PATCH', body: JSON.stringify({ newPassword, otp: passwordOtp }) });
       setNewPassword("");
       setConfirmPassword("");
       setPasswordOtp("");
       setOtpDestination("");
+      setPasswordOtpStatus("idle");
       setPasswordChanged(true);
     } catch (err) {
       toast.error(err.message || "Failed to update password");
@@ -291,14 +321,18 @@ export default function Settings() {
             <LoadingButton type="button" className="btn btn-secondary" onClick={requestPasswordOtp} loading={pwLoading} loadingLabel="Sending code…" style={{ width: '100%', marginBottom: 14 }}>
               <MailCheck size={16} /> {otpDestination ? 'Resend verification code' : 'Send verification code'}
             </LoadingButton>
+            {recoveryEmailMissing && <div className="otp-email-missing" role="alert">No recovery email is bound to your account. Use <strong>Change Bound Email</strong> below to add one before requesting an OTP.</div>}
             {otpDestination && <div className="account-security-notice" style={{ marginBottom: 14 }}><MailCheck size={16} /><span>Code sent to <strong>{otpDestination}</strong>. It expires in 10 minutes.</span></div>}
             <div className="form-group">
               <label>Email Verification Code</label>
               <div className="settings-input-wrapper">
                 <KeyRound size={16} className="settings-input-icon" />
-                <input className="form-control" inputMode="numeric" maxLength={6} disabled={!otpDestination} value={passwordOtp} onChange={(e) => setPasswordOtp(e.target.value.replace(/\D/g, ''))} placeholder="6-digit code" required style={{ paddingLeft: 38, textAlign: 'center', letterSpacing: 5, fontWeight: 700 }} />
+                <input className={`form-control otp-verification-input ${passwordOtpStatus}`} inputMode="numeric" maxLength={6} disabled={!otpDestination || pwLoading || passwordOtpStatus === "valid"} value={passwordOtp} onChange={(e) => { setPasswordOtp(e.target.value.replace(/\D/g, '')); setPasswordOtpStatus("idle"); setPasswordOtpMessage(""); }} placeholder="6-digit code" aria-invalid={passwordOtpStatus === "invalid"} required style={{ paddingLeft: 38, textAlign: 'center', letterSpacing: 5, fontWeight: 700 }} />
               </div>
+              {passwordOtpMessage && <p className="otp-verification-message" role="alert">{passwordOtpMessage}</p>}
             </div>
+            {otpDestination && <LoadingButton type="button" className="btn btn-secondary" disabled={pwLoading || passwordOtpStatus === "valid"} onClick={verifyPasswordOtp} loading={passwordOtpStatus === "checking"} loadingLabel="Checking OTP…" style={{ width: '100%', marginBottom: 14 }}>{passwordOtpStatus === "valid" ? 'OTP verified' : 'Verify OTP'}</LoadingButton>}
+            {passwordOtpStatus === "valid" && <div className="otp-verification-success" role="status">OTP verified. You can now set a new password.</div>}
             <div className="form-row">
               <div className="form-group">
                 <label>New Password</label>
@@ -310,12 +344,14 @@ export default function Settings() {
                     placeholder="At least 10 characters"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
+                    disabled={pwLoading || passwordOtpStatus !== "valid"}
                     required
                     style={{ paddingLeft: 38, paddingRight: 38 }}
                   />
                   <button
                     type="button"
                     className="settings-eye-btn"
+                    disabled={pwLoading || passwordOtpStatus !== "valid"}
                     onClick={() => setShowNew(!showNew)}
                   >
                     {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -332,12 +368,14 @@ export default function Settings() {
                     placeholder="Re-enter new password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
+                    disabled={pwLoading || passwordOtpStatus !== "valid"}
                     required
                     style={{ paddingLeft: 38, paddingRight: 38 }}
                   />
                   <button
                     type="button"
                     className="settings-eye-btn"
+                    disabled={pwLoading || passwordOtpStatus !== "valid"}
                     onClick={() => setShowConfirm(!showConfirm)}
                   >
                     {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -345,14 +383,14 @@ export default function Settings() {
                 </div>
               </div>
             </div>
-            <LoadingButton className="btn btn-primary" type="submit" loading={pwLoading} loadingLabel="Updating password…">
+            <LoadingButton className="btn btn-primary" type="submit" disabled={passwordOtpStatus !== "valid"} loading={pwLoading} loadingLabel="Updating password…">
               <Lock size={15} /> Update Password
             </LoadingButton>
           </form>
         </div>
 
         {/* ====== APPEARANCE ====== */}
-        <ChangeEmail onChanged={() => { setPasswordOtp(''); setOtpDestination(''); }} />
+        <ChangeEmail onChanged={() => { setPasswordOtp(''); setOtpDestination(''); setPasswordOtpStatus('idle'); }} />
         <div className="card settings-card">
           <div className="settings-card-header">
             <div className="settings-card-icon purple">

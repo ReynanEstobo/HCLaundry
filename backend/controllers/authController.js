@@ -18,6 +18,11 @@ async function identityFor(user) {
 }
 
 const accountNotFound = () => Object.assign(new Error('Account does not exist.'), { status: 404 })
+const contactEmailRequired = recovery => Object.assign(new Error(recovery
+  ? 'This account does not have a recovery email. Ask an administrator to add one before resetting the password.'
+  : 'No recovery email is bound to your account. Add one before requesting a password code.'), {
+  status: 409, code: 'CONTACT_EMAIL_REQUIRED',
+})
 const literalPattern = value => value.replace(/[\\%_]/g, character => `\\${character}`)
 const isInternalAccountEmail = value => /@accounts\.(?:hc|ic)laundry\.local$/i.test(String(value || ''))
 
@@ -71,7 +76,7 @@ async function passwordVerificationEmail(identity) {
   if (error) throw Object.assign(new Error(error.message), { status: 400 })
   const email = staff?.contact_email || (isInternalAccountEmail(staff?.email) ? null : staff?.email) || identity.user.email
   if (!email || isInternalAccountEmail(email)) {
-    throw Object.assign(new Error('No contact email is available. Ask an administrator to add one before changing your password.'), { status: 400 })
+    throw contactEmailRequired(false)
   }
   return email
 }
@@ -139,7 +144,7 @@ async function findResetAccount(identifier) {
   const data = await findActiveAccount(identifier, true)
   if (!data?.auth_id) return null
   const email = data.contact_email || (isInternalAccountEmail(data.email) ? null : data.email)
-  if (!email) throw Object.assign(new Error('No recovery email is configured. Contact an administrator.'), { status: 400 })
+  if (!email) throw contactEmailRequired(true)
   return { user: { id: data.auth_id }, staffId: data.id, email }
 }
 
@@ -148,6 +153,13 @@ export async function requestForgotPasswordOtp({ identifier }) {
   if (!account) throw accountNotFound()
   await issuePasswordOtp({ userId: account.user.id, staffId: account.staffId, email: account.email })
   return { success: true, message: 'A verification code has been sent to your recovery email.' }
+}
+
+export async function verifyForgotPasswordOtp({ identifier, otp }) {
+  const account = await findResetAccount(identifier)
+  if (!account) throw accountNotFound()
+  await verifyPasswordOtp(account, otp)
+  return { success: true }
 }
 
 export async function resetForgottenPassword({ identifier, otp, newPassword }) {
@@ -193,5 +205,11 @@ export async function updatePassword({ currentPassword, newPassword, otp }, iden
     const { error: staffError } = await database.from('staff').update({ must_change_password: false }).eq('id', identity.staffId)
     if (staffError) throw Object.assign(new Error(staffError.message), { status: 400 })
   }
+  return { success: true }
+}
+
+export async function verifyPasswordChangeOtp({ otp }, identity) {
+  if (identity.mustChangePassword) throw Object.assign(new Error('Activate your account first using the temporary password.'), { status: 400 })
+  await verifyPasswordOtp(identity, otp)
   return { success: true }
 }

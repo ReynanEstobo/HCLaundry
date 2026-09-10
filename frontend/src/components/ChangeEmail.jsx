@@ -11,6 +11,8 @@ export default function ChangeEmail({ onChanged }) {
   const [visible, setVisible] = useState(false)
   const [challenge, setChallenge] = useState(null)
   const [otp, setOtp] = useState('')
+  const [otpStatus, setOtpStatus] = useState('idle')
+  const [otpMessage, setOtpMessage] = useState('')
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [savedEmail, setSavedEmail] = useState('')
@@ -27,14 +29,29 @@ export default function ChangeEmail({ onChanged }) {
       })
       setChallenge(result)
       setOtp('')
+      setOtpStatus('idle')
+      setOtpMessage('')
       setPassword('')
     } catch (error) { setError(error.message) }
     finally { setBusy('') }
   }
 
+  async function verifyOtp() {
+    if (!challenge || !/^\d{6}$/.test(otp)) { setOtpStatus('invalid'); setOtpMessage('Enter the complete 6-digit code.'); return }
+    setBusy('verify')
+    setOtpStatus('checking'); setOtpMessage(''); setError('')
+    try {
+      await apiFetch('/api/auth/email/otp/verify', { method: 'POST', body: JSON.stringify({ challengeId: challenge.challengeId, otp }) })
+      setOtpStatus('valid')
+    } catch (error) {
+      setOtpStatus('invalid')
+      setOtpMessage(/invalid verification code/i.test(error.message) ? 'OTP is wrong. Please try again.' : error.message)
+    } finally { setBusy('') }
+  }
+
   async function confirm(event) {
     event.preventDefault()
-    if (busy || !challenge) return
+    if (busy || !challenge || otpStatus !== 'valid') return
     setBusy('confirm')
     setError('')
     try {
@@ -69,10 +86,12 @@ export default function ChangeEmail({ onChanged }) {
       <LoadingButton type="submit" className="btn btn-primary" loading={busy === 'send'} loadingLabel="Sending code...">Send code to new email</LoadingButton>
     </form> : <form onSubmit={confirm}>
       <div className="account-security-notice" role="status"><MailCheck size={18} /><span>Code sent to <strong>{challenge.destination}</strong>. Expires in 10 minutes; maximum five attempts.</span></div>
-      <div className="form-group" style={{ marginTop: 16 }}><label htmlFor="bound-email-code">Verification code from new email</label><input id="bound-email-code" className="form-control" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={otp} onChange={event => setOtp(event.target.value.replace(/\D/g, ''))} disabled={Boolean(busy)} required /></div>
+      <div className="form-group" style={{ marginTop: 16 }}><label htmlFor="bound-email-code">Verification code from new email</label><input id="bound-email-code" className={`form-control otp-verification-input ${otpStatus}`} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={otp} onChange={event => { setOtp(event.target.value.replace(/\D/g, '')); setOtpStatus('idle'); setOtpMessage('') }} disabled={Boolean(busy) || otpStatus === 'valid'} aria-invalid={otpStatus === 'invalid'} required />{otpMessage && <p className="otp-verification-message" role="alert">{otpMessage}</p>}</div>
+      <LoadingButton type="button" className="btn btn-secondary" disabled={Boolean(busy) || otpStatus === 'valid'} onClick={verifyOtp} loading={busy === 'verify'} loadingLabel="Checking OTP...">{otpStatus === 'valid' ? 'OTP verified' : 'Verify OTP'}</LoadingButton>
+      {otpStatus === 'valid' && <div className="otp-verification-success" role="status">OTP verified. You can now confirm the email change.</div>}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-        <LoadingButton type="submit" className="btn btn-primary" loading={busy === 'confirm'} loadingLabel="Updating email...">Verify and change email</LoadingButton>
-        <button type="button" className="btn btn-secondary" disabled={Boolean(busy)} onClick={() => { setChallenge(null); setOtp(''); setError('') }}>Change address / request another code</button>
+        <LoadingButton type="submit" className="btn btn-primary" disabled={otpStatus !== 'valid'} loading={busy === 'confirm'} loadingLabel="Updating email...">Confirm email change</LoadingButton>
+        <button type="button" className="btn btn-secondary" disabled={Boolean(busy)} onClick={() => { setChallenge(null); setOtp(''); setOtpStatus('idle'); setOtpMessage(''); setError('') }}>Change address / request another code</button>
       </div>
     </form>}
   </section>
