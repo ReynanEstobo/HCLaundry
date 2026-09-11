@@ -43,6 +43,7 @@ export default function LandingChatbot({ settings }) {
   const input = useRef(null);
   const launcher = useRef(null);
   const log = useRef(null);
+  const topicDrag = useRef({ active: false, moved: false, startX: 0, startScrollLeft: 0, suppressClick: false });
   useEffect(() => { if (open) input.current?.focus(); }, [open]);
   useEffect(() => { if (log.current) log.current.scrollTop = log.current.scrollHeight; }, [messages, open]);
   useEffect(() => () => window.clearTimeout(replyTimer.current), []);
@@ -67,6 +68,30 @@ export default function LandingChatbot({ settings }) {
     target?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     target?.querySelector('input')?.focus({ preventScroll: true });
   };
+  const startTopicDrag = event => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    const rail = event.currentTarget;
+    if (rail.scrollWidth <= rail.clientWidth) return;
+    topicDrag.current = { ...topicDrag.current, active: true, moved: false, startX: event.clientX, startScrollLeft: rail.scrollLeft };
+    rail.setPointerCapture?.(event.pointerId);
+  };
+  const moveTopicDrag = event => {
+    const drag = topicDrag.current;
+    if (!drag.active) return;
+    const distance = event.clientX - drag.startX;
+    if (Math.abs(distance) <= 3 && !drag.moved) return;
+    drag.moved = true;
+    event.currentTarget.classList.add('is-mouse-dragging');
+    event.currentTarget.scrollLeft = drag.startScrollLeft - distance;
+    event.preventDefault();
+  };
+  const finishTopicDrag = event => {
+    const drag = topicDrag.current;
+    if (!drag.active) return;
+    event.currentTarget.classList.remove('is-mouse-dragging');
+    topicDrag.current = { ...drag, active: false, suppressClick: drag.moved };
+    if (drag.moved) window.setTimeout(() => { topicDrag.current.suppressClick = false; }, 0);
+  };
   return <div className="laundry-chat">
     {open && <section id="laundry-chat-panel" className="laundry-chat-panel" role="dialog" aria-modal="false" aria-labelledby="laundry-chat-title" onKeyDown={event => { if (event.key === 'Escape') close(); }}>
       <header className="laundry-chat-header">
@@ -85,7 +110,7 @@ export default function LandingChatbot({ settings }) {
         </div>)}
         {isTyping && <div className="laundry-chat-typing" role="status" aria-label="I&C Laundry assistant is typing"><img src="/assets/Rectangle.png" alt="" /><div><span>I&C assistant is replying</span><p><i /><i /><i /></p></div></div>}
       </div>
-      <div className="laundry-chat-suggestions"><span className="laundry-chat-topics-label">Explore a quick question</span><div className="laundry-chat-topics" aria-label="Suggested questions">{topics.map((topic, index) => { const Icon = topicIcons[index]; return <button type="button" key={topic} onClick={() => ask(topic)} disabled={isTyping}><Icon size={14} aria-hidden="true" />{topic}<ArrowUpRight className="laundry-chat-topic-arrow" size={13} aria-hidden="true" /></button>; })}</div></div>
+      <div className="laundry-chat-suggestions"><span className="laundry-chat-topics-label">Explore a quick question</span><div className="laundry-chat-topics" aria-label="Suggested questions" onPointerDown={startTopicDrag} onPointerMove={moveTopicDrag} onPointerUp={finishTopicDrag} onPointerCancel={finishTopicDrag} onClickCapture={event => { if (topicDrag.current.suppressClick) { event.preventDefault(); event.stopPropagation(); } }}>{topics.map((topic, index) => { const Icon = topicIcons[index]; return <button type="button" key={topic} onClick={() => ask(topic)} disabled={isTyping}><Icon size={14} aria-hidden="true" />{topic}<ArrowUpRight className="laundry-chat-topic-arrow" size={13} aria-hidden="true" /></button>; })}</div></div>
       <form className="laundry-chat-form" onSubmit={event => { event.preventDefault(); ask(draft); }}>
         <input ref={input} aria-label="Your question" placeholder="Ask a quick question…" maxLength={300} value={draft} onChange={event => setDraft(event.target.value)} />
         <button type="submit" disabled={!draft.trim() || isTyping} aria-label="Send question"><Send size={19} /></button>

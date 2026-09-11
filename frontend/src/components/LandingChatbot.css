@@ -54,7 +54,9 @@
 .laundry-chat-typing i:nth-child(3) { animation-delay: .24s; }
 .laundry-chat-suggestions { flex-shrink: 0; padding: 10px 16px 9px; border-top: 1px solid #e9f0f5; }
 .laundry-chat-topics-label { display: block; margin-bottom: 7px; color: #69818f; font-size: 10px; font-weight: 600; letter-spacing: .4px; }
-.laundry-chat-topics { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-height: 39px; padding: 0; scrollbar-width: none; }
+.laundry-chat-topics { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-height: 39px; padding: 0; scrollbar-width: none; cursor: grab; }
+.laundry-chat-topics.is-mouse-dragging { cursor: grabbing; user-select: none; }
+.laundry-chat-topics.is-mouse-dragging * { cursor: grabbing !important; }
 .laundry-chat-topics::-webkit-scrollbar { display: none; }
 .laundry-chat-topics button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; border-color: #e0ebf1; border-radius: 10px; padding: 8px 10px; background: white; color: #42677c; font-size: 11px; }
 .laundry-chat-topic-arrow { color: #7a9aaa; }
