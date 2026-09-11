@@ -1,11 +1,20 @@
 const SESSION_KEY = 'ic-laundry-session'
 const LEGACY_SESSION_KEY = 'hc-laundry-session'
+const TAB_SESSION_KEY = 'ic-laundry-tab-session'
 const sessionListeners = new Set()
 let expiryTimer
 
+function tabStorage() {
+  return globalThis.sessionStorage || null
+}
+
 function readSession() {
-  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || localStorage.getItem(LEGACY_SESSION_KEY) || 'null') }
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || localStorage.getItem(LEGACY_SESSION_KEY) || tabStorage()?.getItem(TAB_SESSION_KEY) || 'null') }
   catch { return null }
+}
+
+export function isStoredSessionPersistent() {
+  return Boolean(localStorage.getItem(SESSION_KEY) || localStorage.getItem(LEGACY_SESSION_KEY))
 }
 
 export function sessionExpiry(session) {
@@ -70,18 +79,29 @@ export function getStoredSession() {
       clearSession()
       return null
     }
-    if (session && !localStorage.getItem(SESSION_KEY)) localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+    // Upgrade the old persistent key, but never turn a tab-only session into a
+    // remembered session without the user choosing Remember me.
+    if (session && localStorage.getItem(LEGACY_SESSION_KEY) && !localStorage.getItem(SESSION_KEY)) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+      localStorage.removeItem(LEGACY_SESSION_KEY)
+    }
     return session
   } catch { return null }
 }
-export function storeSession(session) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+export function storeSession(session, { remember = true } = {}) {
+  const storage = remember ? localStorage : tabStorage()
+  const key = remember ? SESSION_KEY : TAB_SESSION_KEY
+  if (!storage) throw new Error('Session storage is unavailable in this browser.')
+  storage.setItem(key, JSON.stringify(session))
+  if (remember) tabStorage()?.removeItem(TAB_SESSION_KEY)
+  else localStorage.removeItem(SESSION_KEY)
   localStorage.removeItem(LEGACY_SESSION_KEY)
   notifySession(getStoredSession())
 }
 export function clearSession() {
   localStorage.removeItem(SESSION_KEY)
   localStorage.removeItem(LEGACY_SESSION_KEY)
+  tabStorage()?.removeItem(TAB_SESSION_KEY)
   notifySession(null)
 }
 

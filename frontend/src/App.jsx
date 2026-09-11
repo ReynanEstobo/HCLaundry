@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -83,6 +83,72 @@ function AppRoutes() {
   )
 }
 
+// Tables can overflow on smaller screens. Touch devices already swipe them
+// naturally; this gives mouse users the same click-and-drag behaviour.
+function TableMouseDragScroll() {
+  useEffect(() => {
+    let activeTable = null
+    let startX = 0
+    let startScrollLeft = 0
+    let dragged = false
+    let suppressClick = false
+
+    const isInteractive = (target) => target.closest('a, button, input, select, textarea, label, [role="button"]')
+
+    const onMouseDown = (event) => {
+      if (event.button !== 0 || isInteractive(event.target)) return
+      const table = event.target.closest('.table-wrapper')
+      if (!table || table.scrollWidth <= table.clientWidth) return
+
+      activeTable = table
+      startX = event.clientX
+      startScrollLeft = table.scrollLeft
+      dragged = false
+    }
+
+    const onMouseMove = (event) => {
+      if (!activeTable) return
+      const distance = event.clientX - startX
+      if (Math.abs(distance) > 3) {
+        dragged = true
+        activeTable.classList.add('is-mouse-dragging')
+        activeTable.scrollLeft = startScrollLeft - distance
+        event.preventDefault()
+      }
+    }
+
+    const onMouseUp = () => {
+      if (!activeTable) return
+      activeTable.classList.remove('is-mouse-dragging')
+      suppressClick = dragged
+      activeTable = null
+      if (suppressClick) {
+        window.setTimeout(() => { suppressClick = false }, 0)
+      }
+    }
+
+    const onClick = (event) => {
+      if (suppressClick) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    }
+
+    document.addEventListener('mousedown', onMouseDown)
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    document.addEventListener('click', onClick, true)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      document.removeEventListener('click', onClick, true)
+    }
+  }, [])
+
+  return null
+}
+
 export default function App() {
   return (
     <AppErrorBoundary>
@@ -100,6 +166,7 @@ export default function App() {
           },
         }}
       />
+      <TableMouseDragScroll />
       <AppRoutes />
     </AuthProvider>
     </AppErrorBoundary>

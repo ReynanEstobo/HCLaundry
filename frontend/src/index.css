@@ -1494,6 +1494,30 @@ textarea.form-control {
   transform: translateX(4px);
 }
 
+.login-remember-me {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  gap: 9px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.login-remember-me input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: #1688be;
+  cursor: pointer;
+}
+.login-remember-me input:disabled,
+.login-remember-me input:disabled + span {
+  cursor: not-allowed;
+  opacity: .7;
+}
+
 /* Eye toggle */
 .login-eye-btn {
   position: absolute;
@@ -5502,7 +5526,16 @@ html, body, #root { max-width: 100%; overflow-x: hidden; }
 img, video, canvas { max-width: 100%; height: auto; }
 .main-content, .page-content, .card, .settings-card, .charts-grid, .dashboard-workspace-content, .dashboard-workspace-sidebar { min-width: 0; }
 input, select, textarea, button { max-width: 100%; }
-.table-wrapper { -webkit-overflow-scrolling: touch; overscroll-behavior-inline: contain; }
+.table-wrapper {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-inline: contain;
+  cursor: grab;
+}
+.table-wrapper.is-mouse-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+.table-wrapper.is-mouse-dragging * { cursor: grabbing !important; }
 .table-wrapper table { min-width: max-content; }
 .recharts-responsive-container { min-width: 0 !important; }
 

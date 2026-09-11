@@ -1,4 +1,4 @@
-import { apiFetch, clearSession, getStoredSession, onSessionChange, runQuery, storeSession } from '../services/api/client'
+import { apiFetch, clearSession, getStoredSession, isStoredSessionPersistent, onSessionChange, runQuery, storeSession } from '../services/api/client'
 
 const authListeners = new Set()
 let reauthenticationPassword = null
@@ -51,12 +51,12 @@ export const supabase = {
   auth: {
     async getSession() { return { data: { session: getStoredSession() } } },
     onAuthStateChange(callback) { authListeners.add(callback); return { data: { subscription: { unsubscribe: () => authListeners.delete(callback) } } } },
-    async signInWithPassword({ identifier, email, password }) {
+    async signInWithPassword({ identifier, email, password, remember = true }) {
       try {
         const data = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ identifier: identifier || email, password }) })
         reauthenticationPassword = password
         data.session.hc_must_change_password = Boolean(data.mustChangePassword)
-        storeSession(data.session)
+        storeSession(data.session, { remember })
         return { data: { user: data.user, session: data.session }, error: null }
       } catch (error) { return { data: { user: null, session: null }, error: { message: error.message } } }
     },
@@ -80,7 +80,7 @@ export const supabase = {
         // valid session before leaving the activation/security screen.
         const refreshed = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ identifier: session?.user?.email, password }) })
         refreshed.session.hc_must_change_password = Boolean(refreshed.mustChangePassword)
-        storeSession(refreshed.session)
+        storeSession(refreshed.session, { remember: isStoredSessionPersistent() })
         reauthenticationPassword = password
         return { error: null }
       } catch (error) { return { error: { message: error.message } } }

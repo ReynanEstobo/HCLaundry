@@ -12,6 +12,7 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -19,7 +20,7 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      const { error: signInError } = await signIn(identifier, password)
+      const { error: signInError } = await signIn(identifier, password, rememberMe)
       if (signInError) setError(signInError.message)
     } finally {
       setLoading(false)
@@ -69,6 +70,15 @@ export default function Login() {
                   </button>
                 </div>
               </div>
+              <label className="login-remember-me">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  disabled={loading}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                />
+                <span>Remember me on this device</span>
+              </label>
               <LoadingButton type="submit" className="login-submit-btn" loading={loading} loadingLabel="Signing in...">Sign In</LoadingButton>
               <div className="login-card-footer" style={{ marginTop: 16 }}>
                 <button type="button" className="login-forgot-password" disabled={loading} onClick={() => navigate('/forgot-password')}>Forgot password?</button>
